@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QINGWA | Personal Space</title>
+    <style>
+        /* 瑞士简约风格核心变量定义 */
+        :root {
+            --bg-color: #0d0d0f;
+            --card-bg: #16161a;
+            --card-hover: #1e1e24;
+            --accent-color: #00FF66; /* 极具科技感的青蛙荧光绿 */
+            --text-primary: #ffffff;
+            --text-secondary: #8e8e93;
+            --border-color: #2c2c2e;
+            --font-sans: "Helvetica Neue", Helvetica, Arial, -apple-system, sans-serif;
+            --transition-smooth: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            padding: 4vw;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-x: hidden;
+            opacity: 0;
+            animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* 页面加载淡入 */
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        /* 顶部导航 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8vh;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            text-transform: uppercase;
+        }
+
+        .logo span {
+            color: var(--accent-color);
+        }
+
+        .status {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-align: right;
+            line-height: 1.5;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-color);
+            border-radius: 50%;
+            margin-right: 6px;
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+
+        /* 瑞士网格系统布局 */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* 网格卡片基础样式 */
+        .grid-item {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 40px;
+            border-radius: 0px; /* 瑞士风格强调硬朗的直角，若喜欢圆角可改为 8px */
+            position: relative;
+            overflow: hidden;
+            transition: var(--transition-smooth);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 260px;
+        }
+
+        .grid-item:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-color);
+            background-color: var(--card-hover);
+        }
+
+        /* 编号标识 */
+        .item-number {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+            margin-bottom: 30px;
+        }
+
+        /* 粗体字排版 */
+        .grid-item h2 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.04em;
+            margin-bottom: 15px;
+        }
+
+        .grid-item p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        /* 占宽两栏的卡片 */
+        .col-span-2 {
+            grid-column: span 2;
+        }
+
+        /* Hero 卡片特有样式 */
+        .hero-card {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+        }
+
+        .hero-card:hover {
+            background-color: #00e15a;
+        }
+
+        .hero-card .item-number, .hero-card p {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .hero-card h2 {
+            font-size: 3.5rem;
+            color: #000;
+        }
+
+        /* 示波器动画容器 */
+        .canvas-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 120px;
+            pointer-events: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 技能标签组 */
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .tag {
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            font-family: monospace;
+            transition: var(--transition-smooth);
+        }
+
+        .grid-item:hover .tag {
+            border-color: rgba(0, 255, 102, 0.3);
+            color: var(--accent-color);
+        }
+
+        /* 联系方式链接 */
+        .link-arrow {
+            display: inline-flex;
+            align-items: center;
+            margin-top: auto;
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            transition: var(--transition-smooth);
+        }
+
+        .link-arrow span {
+            margin-left: 8px;
+            transition: var(--transition-smooth);
+        }
+
+        .grid-item:hover .link-arrow span {
+            transform: translateX(8px);
+            color: var(--accent-color);
+        }
+
+        /* 页脚 */
+        footer {
+            margin-top: 8vh;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* 移动端响应式适配 */
+        @media (max-width: 900px) {
+            .grid-container {
+                grid-template-columns: 1fr;
+            }
+            .col-span-2 {
+                grid-column: span 1;
+            }
+            body {
+                padding: 20px;
+            }
+            header, footer {
+                flex-direction: column;
+                gap: 15px;
+            }
+            .status {
+                text-align: left;
+            }
+            .grid-item h2 {
+                font-size: 2rem;
+            }
+            .hero-card h2 {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header>
+        <div class="logo">QINGWA<span>.</span></div>
+        <div class="status">
+            <span class="status-dot"></span>
+            Currently studying in College of Electronic & Information Engineering
+        </div>
+    </header>
+
+    <!-- Bento 风格网格 -->
+    <main class="grid-container">
+
+        <!-- 01 HERO 模块 (占两列) -->
+        <div class="grid-item col-span-2 hero-card">
+            <div class="item-number">01 / WHO I AM</div>
+            <div>
+                <h2>HI, I'M 青蛙.</h2>
+                <p>电子信息工程专业大二在读学生。热衷于在数字世界中寻找逻辑与秩序的平衡点。致力于探索硬件、软件与交互设计的结合。</p>
+            </div>
+        </div>
+
+        <!-- 02 示波器模块 (占一列，内含动态正弦波) -->
+        <div class="grid-item" id="wave-block">
+            <div class="item-number">02 / SIGNAL PROCESSING</div>
+            <div>
+                <h2>信号与波形</h2>
+                <p style="margin-bottom: 20px;">基于 Canvas 渲染的动态示波器。将数学之美可视化，展现电子工程的动态生命力。</p>
+            </div>
+            <div class="canvas-container">
+                <canvas id="oscilloscope"></canvas>
+            </div>
+        </div>
+
+        <!-- 03 专业技能模块 (占一列) -->
+        <div class="grid-item">
+            <div class="item-number">03 / TECH STACK</div>
+            <div>
+                <h2>专业技能</h2>
+                <p>目前掌握及正在深入研究的技术与工具：</p>
+                <div class="tag-container">
+                    <span class="tag">C/C++</span>
+                    <span class="tag">STM32 MCU</span>
+                    <span class="tag">Python</span>
+                    <span class="tag">Altium Designer</span>
+                    <span class="tag">HTML/CSS/JS</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 04 个人愿景与项目 (占两列) -->
+        <div class="grid-item col-span-2">
+            <div class="item-number">04 / MY PERSPECTIVE</div>
+            <div>
+                <h2>简约、严谨、高效</h2>
+                <p style="max-width: 600px;">
+                    我深受瑞士设计（Swiss Design）观念的影响。无论是设计电路板、编写固件，还是构建网页，我都力求结构清晰、功能纯粹，去掉所有无意义的冗余，用最干净的逻辑解决复杂的问题。
+                </p>
+            </div>
+            <a href="mailto:yourmail@example.com" class="link-arrow">
+                与我联系 / GET IN TOUCH <span>→</span>
+            </a>
+        </div>
+
+    </main>
+
+    <!-- 页脚 -->
+    <footer>
+        <div>© 2026 QINGWA. ALL RIGHTS RESERVED.</div>
+        <div>DESIGN INSPIRED BY SWISS MINIMALISM</div>
+    </footer>
+
+    <!-- 交互与动画脚本 -->
+    <script>
+        // 示波器正弦波 Canvas 动画
+        const canvas = document.getElementById('oscilloscope');
+        const ctx = canvas.getContext('2d');
+        const waveBlock = document.getElementById('wave-block');
+
+        let animationFrameId;
+        let phase = 0;
+
+        // 自适应调整 Canvas 尺寸
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        // 丝滑正弦波渲染逻辑
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.beginPath();
+            ctx.strokeStyle = '#00FF66'; // 荧光绿
+            ctx.lineWidth = 1.5;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00FF66'; // 发光效果
+
+            const width = canvas.width;
+            const height = canvas.height;
+            const midY = height / 2;
+            
+            // 绘制主波形
+            for (let x = 0; x < width; x++) {
+                // 振幅随边缘衰减，形成包裹在卡片底部的自然弧度
+                const amplitude = (Math.sin(x / width * Math.PI) * 25); 
+                const frequency = 0.015;
+                const y = midY + Math.sin(x * frequency + phase) * amplitude;
+                
+                if (x === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+
+            // 绘制一条暗淡的背景参考线，增强“示波器”仪器质感
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.moveTo(0, midY);
+            ctx.lineTo(width, midY);
+            ctx.stroke();
+
+            // 推动波相位移动（控制速度）
+            phase += 0.04;
+            animationFrameId = requestAnimationFrame(draw);
+        }
+
+        // 鼠标在卡片上移动时，波形振幅产生微弱的动态反馈
+        let baseFrequency = 0.015;
+        waveBlock.addEventListener('mousemove', (e) => {
+            const rect = waveBlock.getBoundingClientRect();
+            const relX = e.clientX - rect.left;
+            // 改变波的频率，营造物理干涉感
+            phase += (relX / rect.width) * 0.05;
+        });
+
+        // 监听视口变化
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        // 初始化
+        resizeCanvas();
+        draw();
+    </script>
+</body>
+</html>
