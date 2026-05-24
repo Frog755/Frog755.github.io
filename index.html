@@ -26,12 +26,12 @@
 
         body {
             background-color: var(--bg-color);
-            /* 新增：模拟工程微点阵和示波器屏幕的微弱荧光溢光 */
+            /* 优化：显著调高点阵（15%不透明度灰色）与荧光溢光（12%不透明度）的对比度，确保在所有屏幕上清晰可见 */
             background-image: 
-                radial-gradient(circle at 50% 40%, rgba(0, 255, 102, 0.035) 0%, transparent 70%),
-                radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+                radial-gradient(circle at 50% 30%, rgba(0, 255, 102, 0.12) 0%, transparent 65%),
+                radial-gradient(circle, rgba(255, 255, 255, 0.15) 1.5px, transparent 1.5px);
             background-size: 100% 100%, 40px 40px;
-            background-attachment: fixed;
+            background-repeat: no-repeat, repeat;
             
             color: var(--text-primary);
             font-family: var(--font-sans);
@@ -227,7 +227,7 @@
             color: var(--accent-color);
         }
 
-        /* 新增：GitHub项目链接布局与动效 */
+        /* GitHub项目链接布局与动效 */
         .project-links {
             display: flex;
             flex-wrap: wrap;
@@ -362,7 +362,7 @@
                     我深受瑞士设计（Swiss Design）观念的影响。无论是设计电路板、编写固件，还是构建网页，我都力求结构清晰、功能纯粹，去掉所有无意义的冗余，用最干净的逻辑解决复杂的问题。
                 </p>
 
-                <!-- 新增 GitHub 项目展示区域 -->
+                <!-- GitHub 项目展示区域 -->
                 <div style="margin-bottom: 40px;">
                     <div style="font-size: 0.85rem; color: var(--text-secondary); font-family: monospace; margin-bottom: 15px; letter-spacing: 0.05em; text-transform: uppercase;">Projects / 开源项目</div>
                     <div class="project-links">
