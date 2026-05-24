@@ -220,6 +220,39 @@
             color: var(--accent-color);
         }
 
+        /* 新增：GitHub项目链接布局与动效 */
+        .project-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+        }
+
+        .project-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: var(--transition-smooth);
+        }
+
+        .project-link:hover {
+            color: var(--accent-color);
+        }
+
+        .project-link span {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            transition: var(--transition-smooth);
+        }
+
+        .project-link:hover span {
+            color: var(--accent-color);
+            transform: translate(2px, -2px);
+        }
+
         /* 页脚 */
         footer {
             margin-top: 8vh;
@@ -254,6 +287,10 @@
             }
             .hero-card h2 {
                 font-size: 2.5rem;
+            }
+            .project-links {
+                flex-direction: column;
+                gap: 15px;
             }
         }
     </style>
@@ -314,9 +351,22 @@
             <div class="item-number">04 / MY PERSPECTIVE</div>
             <div>
                 <h2>简约、严谨、高效</h2>
-                <p style="max-width: 600px;">
+                <p style="max-width: 600px; margin-bottom: 30px;">
                     我深受瑞士设计（Swiss Design）观念的影响。无论是设计电路板、编写固件，还是构建网页，我都力求结构清晰、功能纯粹，去掉所有无意义的冗余，用最干净的逻辑解决复杂的问题。
                 </p>
+
+                <!-- 新增 GitHub 项目展示区域 -->
+                <div style="margin-bottom: 40px;">
+                    <div style="font-size: 0.85rem; color: var(--text-secondary); font-family: monospace; margin-bottom: 15px; letter-spacing: 0.05em; text-transform: uppercase;">Projects / 开源项目</div>
+                    <div class="project-links">
+                        <a href="https://github.com/Frog755/crazy_circuit" target="_blank" class="project-link">
+                            crazy_circuit <span>↗</span>
+                        </a>
+                        <a href="https://github.com/Frog755/ai-code-review-system-demo" target="_blank" class="project-link">
+                            ai-code-review-system-demo <span>↗</span>
+                        </a>
+                    </div>
+                </div>
             </div>
             <a href="mailto:yourmail@example.com" class="link-arrow">
                 与我联系 / GET IN TOUCH <span>→</span>
