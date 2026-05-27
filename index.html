@@ -300,9 +300,30 @@
                 gap: 15px;
             }
         }
+
+        /* WebGL 粒子背景画布 */
+        #particle-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 确保内容排版在粒子背景上方 */
+        header, main, footer {
+            position: relative;
+            z-index: 2;
+        }
     </style>
+    <!-- 导入 Three.js 用于粒子背景效果 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <!-- WebGL 粒子背景 -->
+    <canvas id="particle-canvas"></canvas>
 
     <!-- 顶部导航 -->
     <header>
@@ -464,6 +485,147 @@
         // 初始化
         resizeCanvas();
         draw();
+
+        // ==========================================
+        // --- WebGL 粒子涟漪背景 ---
+        // ==========================================
+        const particleCanvas = document.getElementById('particle-canvas');
+        const scene = new THREE.Scene();
+        
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 15);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: particleCanvas, 
+            antialias: true, 
+            alpha: true 
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const geometry = new THREE.PlaneGeometry(80, 55, 200, 140);
+
+        const vertexShader = `
+            uniform float uTime;
+            uniform vec3 uMouse;
+            varying vec3 vPosition;
+            varying float vDist;
+            varying float vElevation;
+
+            void main() {
+                vPosition = position;
+                float d = distance(position.xy, uMouse.xy);
+                vDist = d;
+                
+                float baseWave = sin(position.x * 0.15 + uTime * 1.2) * cos(position.y * 0.15 + uTime * 1.2) * 0.2;
+                float mouseWave = sin(d * 1.0 - uTime * 6.0) * 1.0 * smoothstep(14.0, 0.0, d);
+                
+                vec3 newPosition = position;
+                newPosition.z += baseWave + mouseWave;
+                vElevation = baseWave + mouseWave;
+
+                vec4 mvPosition = modelViewMatrix * vec4(newPosition, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                
+                float sizeFactor = smoothstep(14.0, 0.0, d) * 2.2 + 0.8;
+                gl_PointSize = (16.0 / -mvPosition.z) * sizeFactor;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float uTime;
+            varying vec3 vPosition;
+            varying float vDist;
+            varying float vElevation;
+
+            void main() {
+                vec2 temp = gl_PointCoord - vec2(0.5);
+                float f = dot(temp, temp);
+                if (f > 0.25) discard;
+                
+                // 荧光绿到深绿渐变以契合 QINGWA 主题
+                vec3 colorCenter = vec3(0.0, 1.0, 0.4); // 霓虹亮绿
+                vec3 colorMid = vec3(0.0, 0.5, 0.25);   // 中绿
+                vec3 colorOuter = vec3(0.005, 0.02, 0.01); // 极暗森林绿
+                
+                vec3 finalColor;
+                if (vDist < 4.0) {
+                    finalColor = mix(colorCenter, colorMid, vDist / 4.0);
+                } else {
+                    finalColor = mix(colorMid, colorOuter, smoothstep(4.0, 14.0, vDist));
+                }
+                
+                float alpha = smoothstep(14.0, 4.0, vDist) * 0.8 + 0.04;
+                float waveGlow = smoothstep(-1.2, 1.2, vElevation) * 0.4 + 0.6;
+                float glow = 1.0 - f * 4.0;
+                
+                gl_FragColor = vec4(finalColor, alpha * glow * waveGlow);
+            }
+        `;
+
+        const uniforms = {
+            uTime: { value: 0 },
+            uMouse: { value: new THREE.Vector3(0, 0, 0) }
+        };
+
+        const particleMaterial = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: uniforms,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const particleGrid = new THREE.Points(geometry, particleMaterial);
+        scene.add(particleGrid);
+
+        const particleMouse = new THREE.Vector2(0, 0);
+        const targetMouse3D = new THREE.Vector3(0, 0, 0);
+        const currentMouse3D = new THREE.Vector3(0, 0, 0);
+        const raycaster = new THREE.Raycaster();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+
+        function updateParticleMouse(clientX, clientY) {
+            particleMouse.x = (clientX / window.innerWidth) * 2 - 1;
+            particleMouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            updateParticleMouse(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if(e.touches.length > 0) {
+                updateParticleMouse(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        const clock = new THREE.Clock();
+
+        const animateParticles = () => {
+            requestAnimationFrame(animateParticles);
+            const elapsedTime = clock.getElapsedTime();
+
+            uniforms.uTime.value = elapsedTime;
+
+            raycaster.setFromCamera(particleMouse, camera);
+            raycaster.ray.intersectPlane(plane, targetMouse3D);
+
+            currentMouse3D.lerp(targetMouse3D, 0.06);
+            uniforms.uMouse.value.copy(currentMouse3D);
+
+            renderer.render(scene, camera);
+        };
+
+        animateParticles();
     </script>
 </body>
 </html>

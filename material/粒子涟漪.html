@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>正对屏幕的水波粒子网格</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #060713; /* 深邃的黑蓝色背景 */
+            font-family: sans-serif;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .content {
+            position: relative;
+            z-index: 10;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            pointer-events: none; /* 让鼠标事件穿透 */
+        }
+        h1 {
+            font-weight: 300;
+            letter-spacing: 5px;
+            font-size: 2.5rem;
+            text-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+            margin: 0;
+        }
+        p {
+            color: #7983a4;
+            letter-spacing: 2px;
+            margin-top: 12px;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="content">
+        <h1>ANTIGRAVITY RIPPLE</h1>
+        <p>正对视口 · 无缝粒子涟漪</p>
+    </div>
+
+    <!-- 导入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- 1. 初始化场景和正对屏幕的相机 ---
+        const scene = new THREE.Scene();
+        
+        // 摆正相机：z 轴朝向屏幕，垂直俯视原点
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 15);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. 创建更广、密度合理的粒子网格 ---
+        // 宽度 80，高度 55，保证即使在宽屏设备上也不会露出边缘
+        const geometry = new THREE.PlaneGeometry(80, 55, 200, 140);
+
+        // --- 3. 着色器逻辑 ---
+        const vertexShader = `
+            uniform float uTime;
+            uniform vec3 uMouse;
+            varying vec3 vPosition;
+            varying float vDist;
+            varying float vElevation; // 将起伏高度传给片元着色器
+
+            void main() {
+                vPosition = position;
+                
+                // 计算粒子到鼠标（在 XY 平面）的距离
+                float d = distance(position.xy, uMouse.xy);
+                vDist = d;
+                
+                // 1. 基础呼吸起伏波纹
+                float baseWave = sin(position.x * 0.15 + uTime * 1.2) * cos(position.y * 0.15 + uTime * 1.2) * 0.2;
+                
+                // 2. 鼠标划过产生的水波荡漾波纹
+                // 振幅设为 1.0，起伏比之前更大更深邃
+                // smoothstep(14.0, 0.0, d) 产生直径为 28 像素的圆形作用域，边缘自然过渡
+                float mouseWave = sin(d * 1.0 - uTime * 6.0) * 1.0 * smoothstep(14.0, 0.0, d);
+                
+                vec3 newPosition = position;
+                // 正对着屏幕时，修改 Z 轴（纵深方向）会让粒子朝向/背向相机运动，产生极强的凸起和发散效果
+                newPosition.z += baseWave + mouseWave;
+                
+                vElevation = baseWave + mouseWave; // 记录波动高度
+
+                vec4 mvPosition = modelViewMatrix * vec4(newPosition, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                
+                // 3. 粒子大小控制
+                // 越靠近鼠标，粒子由于起伏升高会变大，极具立体空间感
+                float sizeFactor = smoothstep(14.0, 0.0, d) * 2.2 + 0.8;
+                gl_PointSize = (16.0 / -mvPosition.z) * sizeFactor;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float uTime;
+            varying vec3 vPosition;
+            varying float vDist;
+            varying float vElevation;
+
+            void main() {
+                // 圆形剪裁
+                vec2 temp = gl_PointCoord - vec2(0.5);
+                float f = dot(temp, temp);
+                if (f > 0.25) discard;
+                
+                // 高级霓虹色彩渐变：
+                // 鼠标核心为极致的青翠色，向外渐变到优雅的深邃靛蓝色
+                vec3 colorCenter = vec3(0.0, 0.95, 1.0);
+                vec3 colorMid = vec3(0.35, 0.15, 0.9);
+                vec3 colorOuter = vec3(0.06, 0.1, 0.25);
+                
+                vec3 finalColor;
+                if (vDist < 4.0) {
+                    finalColor = mix(colorCenter, colorMid, vDist / 4.0);
+                } else {
+                    finalColor = mix(colorMid, colorOuter, smoothstep(4.0, 14.0, vDist));
+                }
+                
+                // 圆形光圈的透明度控制：
+                // 即使离鼠标很远（>14），也保留 0.04 的微光底色，让全屏的网格隐约可见，极具高级感
+                float alpha = smoothstep(14.0, 4.0, vDist) * 0.8 + 0.04;
+                
+                // 亮度加成：波峰处的粒子（高度高）会稍微更亮，模拟水波的反光
+                float waveGlow = smoothstep(-1.2, 1.2, vElevation) * 0.4 + 0.6;
+                
+                float glow = 1.0 - f * 4.0;
+                
+                gl_FragColor = vec4(finalColor, alpha * glow * waveGlow);
+            }
+        `;
+
+        const uniforms = {
+            uTime: { value: 0 },
+            uMouse: { value: new THREE.Vector3(0, 0, 0) }
+        };
+
+        const material = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: uniforms,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const particleGrid = new THREE.Points(geometry, material);
+        scene.add(particleGrid);
+
+        // --- 4. 鼠标投影在平行平面上（由于视角摆正，投影范围现在完美闭合，不再会向无穷大延伸） ---
+        const mouse = new THREE.Vector2(0, 0);
+        const targetMouse3D = new THREE.Vector3(0, 0, 0);
+        const currentMouse3D = new THREE.Vector3(0, 0, 0);
+        const raycaster = new THREE.Raycaster();
+        // 辅助计算 3D 坐标的隐形平面，完全贴在 z=0 上
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+
+        function updateMouse(clientX, clientY) {
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            updateMouse(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if(e.touches.length > 0) {
+                updateMouse(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- 5. 渲染循环 ---
+        const clock = new THREE.Clock();
+
+        const animate = () => {
+            requestAnimationFrame(animate);
+            const elapsedTime = clock.getElapsedTime();
+
+            uniforms.uTime.value = elapsedTime;
+
+            // 射线交叉计算
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.ray.intersectPlane(plane, targetMouse3D);
+
+            // 缓动追随：0.06 的延迟追随在直面网格下会呈现极其丝滑的流体流动感
+            currentMouse3D.lerp(targetMouse3D, 0.06);
+            uniforms.uMouse.value.copy(currentMouse3D);
+
+            renderer.render(scene, camera);
+        };
+
+        animate();
+    </script>
+</body>
+</html>
