@@ -1,4 +1,8 @@
-/* 视图切换 + 项目详情 + 主题 + 示波器 + 粒子背景 */
+/* ============================================================
+   SWISS STYLE × QINGWA // FROG755
+   View Routing · Dual-Channel Oscilloscope · Particle Mesh ·
+   Live Search & Bento Toggle · Project Drawer Nav · Command Palette
+   ============================================================ */
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -6,88 +10,229 @@ const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const VIEWS = [
-  { id: 'index', num: '00', label: 'INDEX', title: '索引', sub: '总览与快速入口' },
-  { id: 'projects', num: '01', label: 'PROJECTS', title: '项目', sub: '全部收录项目' },
+  { id: 'index', num: '00', label: 'INDEX', title: '索引', sub: '总览与核心指标' },
+  { id: 'projects', num: '01', label: 'PROJECTS', title: '项目', sub: '工程与流水线' },
   { id: 'notes', num: '02', label: 'NOTES', title: '笔记', sub: '文章与方法论' },
-  { id: 'about', num: '03', label: 'ABOUT', title: '关于', sub: '工作方式与工具栈' }
+  { id: 'about', num: '03', label: 'ABOUT', title: '关于', sub: '系统档案与工具栈' }
 ];
 
 const catLabel = (id) => (CATEGORIES.find((c) => c.id === id) || {}).label || id;
 const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff66';
 
-/* ---------------- 渲染 ---------------- */
+/* ---------------- 全局状态 ---------------- */
+let currentView = 'index';
+let currentCat = 'all';
+let searchQuery = '';
+let viewMode = localStorage.getItem('frog-view-mode') || 'list'; // 'list' | 'bento'
+let soundEnabled = localStorage.getItem('frog-sound') === '1';
+let currentProjectIndex = -1;
+let cmdItems = [];
+let cmdSelectedIndex = 0;
 
+/* ---------------- 微音效引擎 (Web Audio API) ---------------- */
+let audioCtx = null;
+function playSound(freq = 750, type = 'sine', duration = 0.04) {
+  if (!soundEnabled) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.4, audioCtx.currentTime + duration);
+    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch (e) {}
+}
+
+/* ---------------- Toast 气泡通知 ---------------- */
+let toastTimer = null;
+function showToast(msg, duration = 2200) {
+  const t = $('#toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('is-show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('is-show'), duration);
+}
+
+function copyText(text, successMsg = '已复制到剪贴板') {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      playSound(900, 'sine', 0.05);
+      showToast(successMsg);
+    }).catch(() => fallbackCopy(text, successMsg));
+  } else {
+    fallbackCopy(text, successMsg);
+  }
+}
+
+function fallbackCopy(text, successMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    playSound(900, 'sine', 0.05);
+    showToast(successMsg);
+  } catch (e) {
+    showToast('复制失败，请手动选择');
+  }
+  document.body.removeChild(ta);
+}
+
+/* ---------------- 渲染 Tabs ---------------- */
 function renderTabs() {
   $('#tabs').innerHTML = VIEWS.map(
-    (v) => `<button class="tab" role="tab" data-view="${v.id}">${v.num} ${v.label}</button>`
+    (v) => `<button class="tab" role="tab" data-view="${v.id}"><span style="opacity:0.6;margin-right:4px">${v.num}</span>${v.label}</button>`
   ).join('');
 }
 
+/* ---------------- 渲染 00 INDEX ---------------- */
 function renderIndex() {
   const featured = PROJECTS.filter((p) => p.featured).slice(0, 3);
+  const totalP = PROJECTS.length;
+  const agentP = PROJECTS.filter((p) => p.cat === 'agents').length;
+  const notesCount = NOTES.length;
 
   $('#view-index').innerHTML = `
     <section class="hero">
       <div class="wrap">
+        <div class="telemetry mono">
+          <span class="status-dot"></span>
+          <span class="active">SYSTEM STATUS: ALL NOMINAL</span>
+          <span>//</span>
+          <span>LOCATION: SHANGHAI · CN</span>
+          <span>//</span>
+          <span>CORE RUNTIME: NODE.JS 22 / PY 3.12 / TRICORE</span>
+        </div>
+
         <div class="hero-grid">
-          <h1 class="hero-title">BUILDING<br>SOFTWARE THAT<br><em>WORKS ITSELF.</em></h1>
-          <aside class="identity">
-            <span class="k">01 / Who I Am</span>
-            <h2>HI, I'M ${esc(SITE.who)}.</h2>
-            <p>${esc(SITE.bio)}</p>
-            <span class="who"><span class="status-dot"></span>${esc(SITE.status)}</span>
+          <div class="hero-title-box">
+            <h1 class="hero-title">BUILDING<br>SOFTWARE THAT<br><em>WORKS ITSELF.</em></h1>
+            <p class="hero-subtag">${esc(SITE.intro)}</p>
+          </div>
+
+          <aside class="identity" id="identityCard">
+            <div class="identity-top mono">
+              <span class="identity-badge"><span class="status-dot"></span>${esc(SITE.status)}</span>
+              <span>OPERATOR #755</span>
+            </div>
+            <div>
+              <h2>HI, I'M ${esc(SITE.who)}.</h2>
+              <p>${esc(SITE.bio)}</p>
+            </div>
+            <div class="identity-foot">
+              <span class="mono" style="font-size:10px;color:var(--sub)">${esc(SITE.contact)}</span>
+              <button class="copy-badge-btn mono" id="copyIntroBtn" title="复制联系方式">
+                <span>COPY INFO</span>
+              </button>
+            </div>
           </aside>
         </div>
       </div>
 
-      <div class="scope">
-        <span class="scope-tag">02 / Signal &amp; Waveform</span>
-        <canvas id="oscilloscope"></canvas>
+      <!-- 数字示波器 -->
+      <div class="scope-wrap">
+        <div class="scope-hud mono">
+          <span class="scope-hud-ch1">CH1: 500mV/DIV · SINE MOD</span>
+          <span class="scope-hud-ch2">CH2: 1.00V/DIV · HARMONIC</span>
+          <span>TIME: 2.0ms/DIV</span>
+          <span>TRIG: AUTO [READY]</span>
+        </div>
+        <canvas id="oscilloscope" class="scope-canvas"></canvas>
+        <div class="scope-controls">
+          <button class="scope-mode-btn is-active" data-smode="sine">SINE</button>
+          <button class="scope-mode-btn" data-smode="pulse">PULSE</button>
+          <button class="scope-mode-btn" data-smode="lissajous">LISSAJOUS</button>
+          <button class="scope-mode-btn" data-smode="harmonic">COMPLEX</button>
+        </div>
       </div>
 
+      <!-- 核心指标统计 -->
       <div class="wrap">
         <div class="hero-foot">
-          <div><span class="k mono">Projects</span><span class="v">${String(PROJECTS.length).padStart(2, '0')}</span></div>
-          <div><span class="k mono">Agents</span><span class="v">${String(PROJECTS.filter((p) => p.cat === 'agents').length).padStart(2, '0')}</span></div>
-          <div><span class="k mono">Notes</span><span class="v">${String(NOTES.length).padStart(2, '0')}</span></div>
-          <div><span class="k mono">Status</span><span class="v" style="font-size:15px"><span class="status-dot"></span>${esc(SITE.status)}</span></div>
+          <div class="stat-box">
+            <div class="stat-k mono"><span>PROJECTS</span><span>01</span></div>
+            <div class="stat-v" data-count="${totalP}">${String(totalP).padStart(2, '0')}</div>
+            <div class="stat-desc">收录验证项目，覆盖全闭环</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-k mono"><span>AGENTS</span><span>02</span></div>
+            <div class="stat-v" data-count="${agentP}">${String(agentP).padStart(2, '0')}</div>
+            <div class="stat-desc">多智能体协同、状态机与执行体</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-k mono"><span>NOTES</span><span>03</span></div>
+            <div class="stat-v" data-count="${notesCount}">${String(notesCount).padStart(2, '0')}</div>
+            <div class="stat-desc">架构推演、部署教学与写作</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-k mono"><span>AUDIT</span><span>04</span></div>
+            <div class="stat-v">100%</div>
+            <div class="stat-desc">无外部云依赖 · 本地可复现</div>
+          </div>
         </div>
       </div>
     </section>
 
+    <!-- 入口选择 -->
     <div class="wrap">
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Entries</h2>
-          <span class="section-meta mono">选择入口进入</span>
+          <h2 class="section-title">Entries // 入口</h2>
+          <span class="section-meta mono">键盘 [1]–[4] 快速跳转</span>
         </div>
         <div class="entries">
           ${VIEWS.map(
             (v) => `
             <button class="entry" data-goto="${v.id}">
-              <span class="entry-num mono">${v.num}</span>
-              <h3 class="entry-title">${esc(v.title)}</h3>
-              <span class="entry-sub">${esc(v.sub)}</span>
-              <span class="entry-arrow">&#8599;</span>
+              <div class="entry-top">
+                <span class="entry-num">${v.num}</span>
+                <span class="entry-shortcut mono">[${parseInt(v.num, 10) + 1}]</span>
+              </div>
+              <div>
+                <h3 class="entry-title">${esc(v.title)}</h3>
+                <span class="entry-sub">${esc(v.sub)}</span>
+              </div>
+              <div class="entry-arrow mono">
+                <span>EXPLORE</span>
+                <span>↗</span>
+              </div>
             </button>`
           ).join('')}
         </div>
       </section>
 
+      <!-- 精选项目 -->
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Selected Work</h2>
-          <button class="section-meta mono" data-goto="projects" style="cursor:pointer">查看全部 &#8594;</button>
+          <h2 class="section-title">Selected Work // 精选工程</h2>
+          <button class="section-meta mono" data-goto="projects" style="cursor:pointer;color:var(--accent)">查看全部 ${totalP} 个项目 →</button>
         </div>
         <div class="featured">
           ${featured
             .map(
               (p) => `
             <article class="fcard" data-project="${p.id}">
-              <div class="fcard-top mono"><span>${p.num}</span><span>${esc(p.year)}</span></div>
+              <div class="fcard-top mono">
+                <span>${p.num} // ${esc(catLabel(p.cat))}</span>
+                <span class="status" data-s="${esc(p.status)}">${esc(p.status)}</span>
+              </div>
               <h3 class="fcard-title">${esc(p.title)}</h3>
               <p class="fcard-sub">${esc(p.subtitle)}</p>
               <p class="fcard-desc">${esc(p.summary)}</p>
+              <div class="fcard-tags">
+                ${p.stack.slice(0, 3).map((s) => `<span class="mini-tag">${esc(s)}</span>`).join('')}
+              </div>
             </article>`
             )
             .join('')}
@@ -96,80 +241,197 @@ function renderIndex() {
     </div>`;
 
   initScope();
+  attachSpotlight();
 }
 
+/* ---------------- 渲染 01 PROJECTS ---------------- */
 function renderProjects() {
   $('#view-projects').innerHTML = `
     <div class="wrap">
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Projects</h2>
+          <h2 class="section-title">Projects // 项目索引</h2>
           <span class="section-meta mono" id="pj-count"></span>
         </div>
-        <div class="filters" id="filters">
-          ${CATEGORIES.map(
-            (c) =>
-              `<button class="chip${c.id === 'all' ? ' is-active' : ''}" data-cat="${c.id}">${esc(c.label)}</button>`
-          ).join('')}
+
+        <div class="projects-toolbar">
+          <div class="search-bar">
+            <span class="search-icon">⌕</span>
+            <input type="text" class="search-input" id="searchInput" placeholder="实时搜索项目名称、描述或技术栈 (如 Playwright, Python, C, Agent)..." autocomplete="off" spellcheck="false" value="${esc(searchQuery)}">
+            <button class="search-clear" id="searchClear" title="清空搜索">✕</button>
+          </div>
+
+          <div class="filter-row">
+            <div class="filters" id="filters">
+              ${CATEGORIES.map((c) => {
+                const count = c.id === 'all' ? PROJECTS.length : PROJECTS.filter((p) => p.cat === c.id).length;
+                return `<button class="chip${c.id === currentCat ? ' is-active' : ''}" data-cat="${c.id}">
+                  <span>${esc(c.label)}</span>
+                  <span class="chip-count">${count}</span>
+                </button>`;
+              }).join('')}
+            </div>
+
+            <div class="view-mode-toggle">
+              <button class="view-btn${viewMode === 'list' ? ' is-active' : ''}" data-vmode="list" title="列表视图">☰ LIST</button>
+              <button class="view-btn${viewMode === 'bento' ? ' is-active' : ''}" data-vmode="bento" title="便当盒卡片视图">☷ BENTO</button>
+            </div>
+          </div>
         </div>
-        <div class="plist" id="plist"></div>
+
+        <div id="projectsContainer"></div>
       </section>
     </div>`;
-  paintList('all');
+
+  paintProjects();
+
+  const input = $('#searchInput');
+  const clearBtn = $('#searchClear');
+  if (input) {
+    input.addEventListener('input', (e) => {
+      searchQuery = e.target.value.trim().toLowerCase();
+      if (clearBtn) clearBtn.style.display = searchQuery ? 'block' : 'none';
+      paintProjects();
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      searchQuery = '';
+      if (input) { input.value = ''; input.focus(); }
+      clearBtn.style.display = 'none';
+      paintProjects();
+    });
+  }
 }
 
-function paintList(cat) {
-  const list = cat === 'all' ? PROJECTS : PROJECTS.filter((p) => p.cat === cat);
-  $('#plist').innerHTML = list
-    .map(
-      (p) => `
-      <div class="prow" data-project="${p.id}">
-        <div class="prow-num">${p.num}</div>
-        <div>
-          <h3 class="prow-title">${esc(p.title)}</h3>
-          <span class="prow-sub">${esc(p.subtitle)}</span>
-        </div>
-        <p class="prow-desc">${esc(p.summary)}</p>
-        <span class="prow-cat">${esc(catLabel(p.cat))}</span>
-        <span><span class="status" data-s="${esc(p.status)}">${esc(p.status)}</span></span>
-        <span class="prow-arrow">&#8594;</span>
-      </div>`
-    )
-    .join('');
-  $('#pj-count').textContent = `${String(list.length).padStart(2, '0')} / ${PROJECTS.length}`;
+function filterProjects() {
+  return PROJECTS.filter((p) => {
+    const matchCat = currentCat === 'all' || p.cat === currentCat;
+    if (!matchCat) return false;
+    if (!searchQuery) return true;
+    const hay = `${p.num} ${p.title} ${p.subtitle} ${p.summary} ${p.body.join(' ')} ${p.points.join(' ')} ${p.stack.join(' ')}`.toLowerCase();
+    return hay.includes(searchQuery);
+  });
 }
 
+function paintProjects() {
+  const list = filterProjects();
+  const container = $('#projectsContainer');
+  const countEl = $('#pj-count');
+  if (countEl) countEl.textContent = `DISPLAYING ${String(list.length).padStart(2, '0')} / ${PROJECTS.length}`;
+
+  if (!container) return;
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size:32px;margin-bottom:12px;opacity:0.5">⌕</div>
+        <h3>未找到匹配的项目</h3>
+        <p>尝试搜索其他关键词，或清空筛选条件。</p>
+        <button class="chip" style="margin-top:14px" onclick="clearAllFilters()">重置所有筛选</button>
+      </div>`;
+    return;
+  }
+
+  if (viewMode === 'list') {
+    container.innerHTML = `
+      <div class="plist">
+        ${list
+          .map(
+            (p) => `
+          <div class="prow" data-project="${p.id}">
+            <div class="prow-num">${p.num}</div>
+            <div>
+              <h3 class="prow-title">${esc(p.title)}</h3>
+              <span class="prow-sub">${esc(p.subtitle)}</span>
+            </div>
+            <p class="prow-desc">${esc(p.summary)}</p>
+            <span class="prow-cat">${esc(catLabel(p.cat))}</span>
+            <span><span class="status" data-s="${esc(p.status)}">${esc(p.status)}</span></span>
+            <span class="prow-arrow">→</span>
+          </div>`
+          )
+          .join('')}
+      </div>`;
+  } else {
+    // Bento Grid 卡片视图
+    container.innerHTML = `
+      <div class="pbento">
+        ${list
+          .map(
+            (p) => `
+          <div class="bento-card" data-project="${p.id}">
+            <div>
+              <div class="bento-top">
+                <span class="bento-cat mono">${p.num} // ${esc(catLabel(p.cat))}</span>
+                <span class="status" data-s="${esc(p.status)}">${esc(p.status)}</span>
+              </div>
+              <h3 class="bento-title">${esc(p.title)}</h3>
+              <p class="bento-sub">${esc(p.subtitle)}</p>
+              <p class="bento-desc">${esc(p.summary)}</p>
+            </div>
+            <div class="bento-foot">
+              <div class="fcard-tags">
+                ${p.stack.slice(0, 3).map((s) => `<span class="mini-tag">${esc(s)}</span>`).join('')}
+              </div>
+              <span class="mono" style="font-size:10px;color:var(--accent);display:inline-flex;align-items:center;gap:4px">
+                OPEN <span>↗</span>
+              </span>
+            </div>
+          </div>`
+          )
+          .join('')}
+      </div>`;
+  }
+  attachSpotlight();
+}
+
+window.clearAllFilters = function () {
+  searchQuery = '';
+  currentCat = 'all';
+  renderProjects();
+};
+
+/* ---------------- 渲染 02 NOTES ---------------- */
 function renderNotes() {
   $('#view-notes').innerHTML = `
     <div class="wrap">
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Notes &amp; Writing</h2>
-          <span class="section-meta mono">${String(NOTES.length).padStart(2, '0')} 篇</span>
+          <h2 class="section-title">Notes &amp; Writings // 思考与方法论</h2>
+          <span class="section-meta mono">共 ${String(NOTES.length).padStart(2, '0')} 篇文章</span>
         </div>
-        ${NOTES.map(
-          (n) => `
-          <article class="note">
-            <div class="note-date">${esc(n.date)}</div>
-            <div>
-              <h3 class="note-title">${esc(n.title)}</h3>
-              <p class="note-desc">${esc(n.desc)}</p>
-            </div>
-            <div class="note-tag">${esc(n.tag)}</div>
-          </article>`
-        ).join('')}
+        <div class="notes-container">
+          ${NOTES.map(
+            (n) => `
+            <article class="note">
+              <div class="note-date">${esc(n.date)}</div>
+              <div>
+                <h3 class="note-title">${esc(n.title)}</h3>
+                <p class="note-desc">${esc(n.desc)}</p>
+              </div>
+              <div class="note-meta">
+                <span class="note-tag">${esc(n.tag)}</span>
+                <span class="note-read">${esc(n.readTime || '5 MIN READ')}</span>
+              </div>
+            </article>`
+          ).join('')}
+        </div>
       </section>
     </div>`;
+  attachSpotlight();
 }
 
+/* ---------------- 渲染 03 ABOUT ---------------- */
 function renderAbout() {
   $('#view-about').innerHTML = `
     <div class="wrap">
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">About</h2>
+          <h2 class="section-title">About // 系统档案</h2>
           <span class="section-meta mono"><span class="status-dot"></span>${esc(SITE.who)}</span>
         </div>
+
         <div class="about-grid">
           <div class="about-lead">
             ${ABOUT.paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}
@@ -181,19 +443,37 @@ function renderAbout() {
               )
               .join('')}
           </div>
+
+          <!-- 命令行终端卡片 -->
+          <div class="cli-widget">
+            <div class="cli-head">
+              <span class="cli-dot red"></span>
+              <span class="cli-dot yellow"></span>
+              <span class="cli-dot green"></span>
+              <span class="cli-title">frog755@terminal — node_inspection</span>
+            </div>
+            <div><span class="cli-prompt">$</span> frog755 --system-status</div>
+            <div class="cli-out">
+              ${(ABOUT.cli || [])
+                .map((item) => `[<span class="cli-highlight">${esc(item.k)}</span>] -> ${esc(item.v)}`)
+                .join('<br>')}
+            </div>
+          </div>
         </div>
 
+        <!-- 理念卡片 -->
         <div class="motto">
-          <span class="mono">Philosophy</span>
+          <span class="motto-label mono">DESIGN PHILOSOPHY // 瑞士设计主张</span>
           <h3>${esc(SITE.motto.split('、')[0])}、${esc(SITE.motto.split('、')[1])}、<em>${esc(SITE.motto.split('、')[2] || '')}</em></h3>
           <p>${esc(SITE.mottoText)}</p>
         </div>
       </section>
 
+      <!-- 工具栈 -->
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Toolkit</h2>
-          <span class="section-meta mono">硬件 · 软件 · AI</span>
+          <h2 class="section-title">Toolkit // 工具与技术栈</h2>
+          <span class="section-meta mono">点击技术栈直接检索项目</span>
         </div>
         <div class="stack-grid">
           ${ABOUT.stackGroups
@@ -201,106 +481,160 @@ function renderAbout() {
               (g) => `
             <div class="stack-col">
               <h4>${esc(g.label)}</h4>
-              <ul>${g.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>
+              <ul>
+                ${g.items.map((i) => `<li data-search-tech="${esc(i)}">${esc(i)}</li>`).join('')}
+              </ul>
             </div>`
             )
             .join('')}
         </div>
       </section>
 
+      <!-- 联系方式 -->
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Get In Touch</h2>
+          <h2 class="section-title">Get In Touch // 建立联络</h2>
           <span class="section-meta mono">${esc(SITE.contact)}</span>
         </div>
         <div class="contact-grid">
-          <a class="contact-row" href="mailto:${esc(SITE.emails[0].addr)}">
+          <div class="contact-row" data-copy="${esc(SITE.emails[0].addr)}">
             <span class="contact-k">${esc(SITE.emails[0].label)}</span>
             <span class="contact-v">${esc(SITE.emails[0].addr)}</span>
-            <span class="contact-go">&#8599;</span>
-          </a>
-          <a class="contact-row" href="mailto:${esc(SITE.emails[1].addr)}">
+            <span class="contact-go mono" title="点击复制">COPY ↗</span>
+          </div>
+          <div class="contact-row" data-copy="${esc(SITE.emails[1].addr)}">
             <span class="contact-k">${esc(SITE.emails[1].label)}</span>
             <span class="contact-v">${esc(SITE.emails[1].addr)}</span>
-            <span class="contact-go">&#8599;</span>
-          </a>
+            <span class="contact-go mono" title="点击复制">COPY ↗</span>
+          </div>
           <a class="contact-row" href="${esc(SITE.contactUrl)}" target="_blank" rel="noopener">
             <span class="contact-k">GitHub</span>
             <span class="contact-v">${esc(SITE.contact)}</span>
-            <span class="contact-go">&#8599;</span>
+            <span class="contact-go mono">VISIT ↗</span>
           </a>
         </div>
       </section>
     </div>`;
+
+  attachSpotlight();
 }
 
-/* ---------------- 详情面板 ---------------- */
-
+/* ---------------- 详情抽屉面板 ---------------- */
 function openProject(id) {
-  const p = PROJECTS.find((x) => x.id === id);
-  if (!p) return;
+  const idx = PROJECTS.findIndex((x) => x.id === id);
+  if (idx === -1) return;
+  currentProjectIndex = idx;
+  const p = PROJECTS[idx];
+
+  const hasPrev = idx > 0;
+  const hasNext = idx < PROJECTS.length - 1;
+
   $('#sheet-body').innerHTML = `
-    <div class="sheet-top">
-      <span class="mono">${p.num} / ${esc(catLabel(p.cat))} / ${esc(p.year)}</span>
-      <button class="sheet-close" data-close>&#10005;</button>
+    <div class="sheet-nav">
+      <div class="sheet-nav-left mono">
+        <span>${p.num} / ${esc(catLabel(p.cat))} / ${esc(p.year)}</span>
+      </div>
+      <div class="sheet-nav-actions">
+        <button class="sheet-btn mono" id="sheetPrevBtn" ${hasPrev ? '' : 'disabled style="opacity:0.4;cursor:not-allowed"'}>
+          ← 上一个
+        </button>
+        <button class="sheet-btn mono" id="sheetNextBtn" ${hasNext ? '' : 'disabled style="opacity:0.4;cursor:not-allowed"'}>
+          下一个 →
+        </button>
+        <button class="sheet-btn mono" id="sheetCopyLinkBtn" title="复制深度分享链接">
+          分享 ↗
+        </button>
+        <button class="sheet-close-btn" data-close title="关闭 (ESC)">✕</button>
+      </div>
     </div>
+
     <span class="status" data-s="${esc(p.status)}">${esc(p.status)}</span>
     <h2 class="sheet-title">${esc(p.title)}</h2>
     <p class="sheet-sub">${esc(p.subtitle)}</p>
-    <p class="sheet-sum">${esc(p.summary)}</p>
+    <div class="sheet-sum">${esc(p.summary)}</div>
 
     <div class="sheet-sec">
-      <h5>Overview</h5>
+      <h5>OVERVIEW // 架构与设计</h5>
       ${p.body.map((t) => `<p>${esc(t)}</p>`).join('')}
     </div>
 
     <div class="sheet-sec">
-      <h5>Key Points</h5>
+      <h5>KEY HIGHLIGHTS // 核心突破点</h5>
       <ul>${p.points.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
     </div>
 
     <div class="sheet-sec">
-      <h5>Stack</h5>
-      <div class="tags">${p.stack.map((s) => `<span class="tag">${esc(s)}</span>`).join('')}</div>
+      <h5>TECH STACK // 依赖与栈</h5>
+      <div class="tags">${p.stack.map((s) => `<span class="tag mono">${esc(s)}</span>`).join('')}</div>
     </div>
 
     ${
       p.links && p.links.length
-        ? `<div class="sheet-sec"><h5>Links</h5><div class="sheet-links">${p.links
-            .map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} &#8599;</a>`)
-            .join('')}</div></div>`
+        ? `<div class="sheet-sec">
+            <h5>RESOURCES // 交付物与链接</h5>
+            <div class="sheet-links">${p.links
+              .map((l) => `<a href="${esc(l.url)}" ${l.url.startsWith('#') ? '' : 'target="_blank" rel="noopener"'}>${esc(l.label)} ↗</a>`)
+              .join('')}</div>
+          </div>`
         : ''
     }`;
+
   $('#sheet').classList.add('is-open');
   document.body.style.overflow = 'hidden';
+  location.hash = `project/${p.id}`;
+
+  $('#sheetPrevBtn').onclick = () => hasPrev && openProject(PROJECTS[idx - 1].id);
+  $('#sheetNextBtn').onclick = () => hasNext && openProject(PROJECTS[idx + 1].id);
+  $('#sheetCopyLinkBtn').onclick = () => copyText(window.location.href, `已复制项目链接: ${p.title}`);
 }
 
 function closeSheet() {
   $('#sheet').classList.remove('is-open');
   document.body.style.overflow = '';
+  currentProjectIndex = -1;
+  if (location.hash.startsWith('#project/')) {
+    location.hash = currentView;
+  }
 }
 
-/* ---------------- 视图切换 ---------------- */
-
-function go(id) {
+/* ---------------- 视图路由切换 ---------------- */
+function go(id, updateHash = true) {
   const v = VIEWS.find((x) => x.id === id) || VIEWS[0];
+  currentView = v.id;
   $$('.view').forEach((el) => el.classList.toggle('is-active', el.id === 'view-' + v.id));
   $$('.tab').forEach((el) => el.classList.toggle('is-active', el.dataset.view === v.id));
-  if (location.hash.slice(1) !== v.id) location.hash = v.id;
+  if (updateHash && location.hash.slice(1) !== v.id && !location.hash.startsWith('#project/')) {
+    location.hash = v.id;
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (v.id === 'index') requestAnimationFrame(resizeScope);
+  playSound(650, 'sine', 0.025);
 }
 
-/* ---------------- 主题 ---------------- */
-
+/* ---------------- 主题切换 ---------------- */
 function setTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('blog-theme', t); } catch (e) {}
+  playSound(850, 'sine', 0.03);
 }
 
-/* ---------------- 示波器 ---------------- */
+/* ---------------- Spotlight 光标流光效果 ---------------- */
+function attachSpotlight() {
+  const targets = $$('.entry, .fcard, .bento-card, .stat-box');
+  targets.forEach((card) => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      card.style.setProperty('--mouse-x', `${x}px`);
+      card.style.setProperty('--mouse-y', `${y}px`);
+    });
+  });
+}
 
+/* ---------------- 数字存储示波器 (DIGITAL STORAGE OSCILLOSCOPE) ---------------- */
 let scopeCtx = null, scopePhase = 0, scopeRaf = null;
+let scopeMode = 'sine';
 
 function resizeScope() {
   const c = $('#oscilloscope');
@@ -316,11 +650,22 @@ function initScope() {
   scopeCtx = canvas.getContext('2d');
   resizeScope();
   if (scopeRaf) cancelAnimationFrame(scopeRaf);
+
   const block = canvas.parentElement;
   block.addEventListener('mousemove', (e) => {
     const r = block.getBoundingClientRect();
-    scopePhase += (e.clientX - r.left) / r.width * 0.05;
+    scopePhase += (e.clientX - r.left) / r.width * 0.08;
   });
+
+  $$('.scope-mode-btn').forEach((btn) => {
+    btn.onclick = () => {
+      $$('.scope-mode-btn').forEach((b) => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      scopeMode = btn.dataset.smode;
+      playSound(700, 'square', 0.03);
+    };
+  });
+
   drawScope();
 }
 
@@ -331,125 +676,322 @@ function drawScope() {
   const w = c.width, h = c.height, mid = h / 2;
   ctx.clearRect(0, 0, w, h);
 
-  // 参考线
-  ctx.beginPath();
-  ctx.strokeStyle = 'rgba(128,128,128,.18)';
+  // 1. 示波器标尺背景网格 (Graticule)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
   ctx.lineWidth = 1;
-  ctx.moveTo(0, mid); ctx.lineTo(w, mid);
+  const gridX = 40, gridY = 24;
+  for (let x = 0; x < w; x += gridX) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let y = 0; y < h; y += gridY) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+  // 中心十字轴线 (Center Crosshair)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
+  ctx.restore();
+
+  // 2. CH2 参考谐波 / 次级波形 (Cyan)
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+  ctx.lineWidth = 1.2;
+  for (let x = 0; x < w; x += 2) {
+    const amp = Math.sin((x / w) * Math.PI) * (h * 0.18);
+    const y = mid + Math.sin(x * 0.03 - scopePhase * 0.6) * amp;
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
   ctx.stroke();
 
+  // 3. CH1 主波形 (Frog Neon Green)
   const color = accent();
   ctx.beginPath();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1.8;
   ctx.shadowBlur = 10;
   ctx.shadowColor = color;
+
   for (let x = 0; x < w; x++) {
-    const amp = Math.sin((x / w) * Math.PI) * (h * 0.26);
-    const y = mid + Math.sin(x * 0.015 + scopePhase) * amp;
+    const envelope = Math.sin((x / w) * Math.PI);
+    let y = mid;
+
+    if (scopeMode === 'sine') {
+      const amp = envelope * (h * 0.32);
+      y = mid + Math.sin(x * 0.018 + scopePhase) * amp;
+    } else if (scopeMode === 'pulse') {
+      const amp = envelope * (h * 0.3);
+      const raw = Math.sin(x * 0.015 + scopePhase);
+      y = mid + (raw > 0 ? 1 : -1) * amp * 0.7;
+    } else if (scopeMode === 'lissajous') {
+      const amp = envelope * (h * 0.34);
+      y = mid + Math.sin(x * 0.02 + scopePhase) * Math.cos(x * 0.01 - scopePhase) * amp;
+    } else if (scopeMode === 'harmonic') {
+      const amp = envelope * (h * 0.28);
+      y = mid + (Math.sin(x * 0.015 + scopePhase) + 0.4 * Math.sin(x * 0.045 - scopePhase * 1.5)) * amp;
+    }
+
     x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  scopePhase += 0.02;
+  scopePhase += 0.022;
   scopeRaf = requestAnimationFrame(drawScope);
 }
 
-/* ---------------- 粒子背景（Three.js，缺失时静默降级） ---------------- */
-
+/* ---------------- 粒子涟漪背景 (Three.js WebGL，带纯 Canvas 优雅降级) ---------------- */
 function initParticles() {
   if (typeof THREE === 'undefined') {
-    document.body.classList.add('no-particles');
-    const btn = $('#fxToggle');
-    if (btn) { btn.disabled = true; btn.title = '粒子背景不可用（未加载 Three.js）'; }
+    initCanvasFallbackParticles();
     return;
   }
+
   const canvas = $('#particle-canvas');
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 0, 15);
-  camera.lookAt(0, 0, 0);
+  if (!canvas) return;
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  try {
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 15);
+    camera.lookAt(0, 0, 0);
 
-  const geometry = new THREE.PlaneGeometry(80, 55, 180, 120);
-  const vertexShader = `
-    uniform float uTime; uniform vec3 uMouse;
-    varying float vDist; varying float vElevation;
-    void main() {
-      float d = distance(position.xy, uMouse.xy);
-      vDist = d;
-      float baseWave = sin(position.x * 0.15 + uTime * 1.2) * cos(position.y * 0.15 + uTime * 1.2) * 0.2;
-      float mouseWave = sin(d - uTime * 6.0) * smoothstep(14.0, 0.0, d);
-      vec3 p = position; p.z += baseWave + mouseWave;
-      vElevation = baseWave + mouseWave;
-      vec4 mv = modelViewMatrix * vec4(p, 1.0);
-      gl_Position = projectionMatrix * mv;
-      gl_PointSize = (16.0 / -mv.z) * (smoothstep(14.0, 0.0, d) * 2.2 + 0.8);
-    }`;
-  const fragmentShader = `
-    uniform vec3 uColor;
-    varying float vDist; varying float vElevation;
-    void main() {
-      vec2 t = gl_PointCoord - vec2(0.5);
-      float f = dot(t, t);
-      if (f > 0.25) discard;
-      float alpha = smoothstep(14.0, 4.0, vDist) * 0.7 + 0.04;
-      float waveGlow = smoothstep(-1.2, 1.2, vElevation) * 0.4 + 0.6;
-      float glow = 1.0 - f * 4.0;
-      gl_FragColor = vec4(uColor, alpha * glow * waveGlow);
-    }`;
-
-  const uniforms = {
-    uTime: { value: 0 },
-    uMouse: { value: new THREE.Vector3(0, 0, 0) },
-    uColor: { value: new THREE.Color(accent()) }
-  };
-
-  const material = new THREE.ShaderMaterial({
-    vertexShader, fragmentShader, uniforms,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-  });
-  scene.add(new THREE.Points(geometry, material));
-
-  const mouse = new THREE.Vector2(0, 0);
-  const target = new THREE.Vector3(0, 0, 0);
-  const current = new THREE.Vector3(0, 0, 0);
-  const raycaster = new THREE.Raycaster();
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-
-  const setMouse = (x, y) => {
-    mouse.x = (x / window.innerWidth) * 2 - 1;
-    mouse.y = -(y / window.innerHeight) * 2 + 1;
-  };
-  window.addEventListener('mousemove', (e) => setMouse(e.clientX, e.clientY));
-  window.addEventListener('touchmove', (e) => { if (e.touches[0]) setMouse(e.touches[0].clientX, e.touches[0].clientY); });
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    resizeScope();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const geometry = new THREE.PlaneGeometry(80, 55, 180, 120);
+    const vertexShader = `
+      uniform float uTime; uniform vec3 uMouse;
+      varying float vDist; varying float vElevation;
+      void main() {
+        float d = distance(position.xy, uMouse.xy);
+        vDist = d;
+        float baseWave = sin(position.x * 0.15 + uTime * 1.2) * cos(position.y * 0.15 + uTime * 1.2) * 0.2;
+        float mouseWave = sin(d - uTime * 6.0) * smoothstep(14.0, 0.0, d);
+        vec3 p = position; p.z += baseWave + mouseWave;
+        vElevation = baseWave + mouseWave;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = (16.0 / -mv.z) * (smoothstep(14.0, 0.0, d) * 2.2 + 0.8);
+      }`;
+    const fragmentShader = `
+      uniform vec3 uColor;
+      varying float vDist; varying float vElevation;
+      void main() {
+        vec2 t = gl_PointCoord - vec2(0.5);
+        float f = dot(t, t);
+        if (f > 0.25) discard;
+        float alpha = smoothstep(14.0, 4.0, vDist) * 0.7 + 0.04;
+        float waveGlow = smoothstep(-1.2, 1.2, vElevation) * 0.4 + 0.6;
+        float glow = 1.0 - f * 4.0;
+        gl_FragColor = vec4(uColor, alpha * glow * waveGlow);
+      }`;
+
+    const uniforms = {
+      uTime: { value: 0 },
+      uMouse: { value: new THREE.Vector3(0, 0, 0) },
+      uColor: { value: new THREE.Color(accent()) }
+    };
+
+    const material = new THREE.ShaderMaterial({
+      vertexShader, fragmentShader, uniforms,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    scene.add(new THREE.Points(geometry, material));
+
+    const mouse = new THREE.Vector2(0, 0);
+    const target = new THREE.Vector3(0, 0, 0);
+    const current = new THREE.Vector3(0, 0, 0);
+    const raycaster = new THREE.Raycaster();
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+
+    const setMouse = (x, y) => {
+      mouse.x = (x / window.innerWidth) * 2 - 1;
+      mouse.y = -(y / window.innerHeight) * 2 + 1;
+    };
+    window.addEventListener('mousemove', (e) => setMouse(e.clientX, e.clientY));
+    window.addEventListener('touchmove', (e) => { if (e.touches[0]) setMouse(e.touches[0].clientX, e.touches[0].clientY); });
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      resizeScope();
+    });
+
+    const clock = new THREE.Clock();
+    (function loop() {
+      requestAnimationFrame(loop);
+      if (document.body.classList.contains('no-particles')) return;
+      uniforms.uTime.value = clock.getElapsedTime();
+      uniforms.uColor.value.set(accent());
+      raycaster.setFromCamera(mouse, camera);
+      raycaster.ray.intersectPlane(plane, target);
+      current.lerp(target, 0.06);
+      uniforms.uMouse.value.copy(current);
+      renderer.render(scene, camera);
+    })();
+  } catch (err) {
+    console.warn('WebGL Three.js initialization failed, falling back to 2D Canvas particles:', err);
+    initCanvasFallbackParticles();
+  }
+}
+
+function initCanvasFallbackParticles() {
+  const canvas = $('#particle-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let w = (canvas.width = window.innerWidth);
+  let h = (canvas.height = window.innerHeight);
+
+  window.addEventListener('resize', () => {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
   });
 
-  const clock = new THREE.Clock();
+  const particles = Array.from({ length: 45 }, () => ({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    vx: (Math.random() - 0.5) * 0.4,
+    vy: (Math.random() - 0.5) * 0.4,
+    size: Math.random() * 2 + 1
+  }));
+
   (function loop() {
     requestAnimationFrame(loop);
     if (document.body.classList.contains('no-particles')) return;
-    uniforms.uTime.value = clock.getElapsedTime();
-    uniforms.uColor.value.set(accent());
-    raycaster.setFromCamera(mouse, camera);
-    raycaster.ray.intersectPlane(plane, target);
-    current.lerp(target, 0.06);
-    uniforms.uMouse.value.copy(current);
-    renderer.render(scene, camera);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = accent();
+    particles.forEach((p) => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
   })();
 }
 
-/* ---------------- 初始化 ---------------- */
+/* ---------------- Command Palette (全局搜索与快捷命令) ---------------- */
+function buildCmdItems() {
+  const items = [];
+  // 1. 视图跳转
+  VIEWS.forEach((v) => {
+    items.push({
+      type: 'VIEW',
+      title: `${v.num} ${v.title} (${v.label})`,
+      meta: v.sub,
+      action: () => go(v.id)
+    });
+  });
+  // 2. 所有项目
+  PROJECTS.forEach((p) => {
+    items.push({
+      type: 'PROJECT',
+      title: `${p.num} ${p.title}`,
+      meta: `${catLabel(p.cat)} · ${p.subtitle}`,
+      action: () => {
+        go('projects', false);
+        openProject(p.id);
+      }
+    });
+  });
+  // 3. 所有笔记
+  NOTES.forEach((n) => {
+    items.push({
+      type: 'NOTE',
+      title: `${n.num} ${n.title}`,
+      meta: `${n.tag} · ${n.date}`,
+      action: () => go('notes')
+    });
+  });
+  // 4. 快捷指令
+  items.push({
+    type: 'ACTION',
+    title: '切换明亮 / 暗色主题',
+    meta: 'Toggle Light / Dark theme',
+    action: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark')
+  });
+  items.push({
+    type: 'ACTION',
+    title: '切换粒子动态背景',
+    meta: 'Toggle background ripples',
+    action: () => {
+      const off = document.body.classList.toggle('no-particles');
+      $('#fxToggle').classList.toggle('is-on', !off);
+    }
+  });
+  items.push({
+    type: 'ACTION',
+    title: '切换按键触觉音效',
+    meta: 'Toggle synthetic sound effects',
+    action: () => {
+      soundEnabled = !soundEnabled;
+      localStorage.setItem('frog-sound', soundEnabled ? '1' : '0');
+      $('#soundToggle').classList.toggle('is-on', soundEnabled);
+      showToast(soundEnabled ? '音效已开启' : '音效已关闭');
+    }
+  });
+  return items;
+}
 
+function openCmdPalette() {
+  const modal = $('#cmdPalette');
+  const input = $('#cmdInput');
+  if (!modal || !input) return;
+  modal.removeAttribute('hidden');
+  input.value = '';
+  cmdSelectedIndex = 0;
+  renderCmdResults('');
+  input.focus();
+  playSound(800, 'sine', 0.03);
+}
+
+function closeCmdPalette() {
+  const modal = $('#cmdPalette');
+  if (modal) modal.setAttribute('hidden', '');
+}
+
+function renderCmdResults(query) {
+  const listEl = $('#cmdList');
+  if (!listEl) return;
+  const q = query.trim().toLowerCase();
+  cmdItems = buildCmdItems().filter((item) => {
+    if (!q) return true;
+    return `${item.type} ${item.title} ${item.meta}`.toLowerCase().includes(q);
+  });
+
+  if (cmdItems.length === 0) {
+    listEl.innerHTML = '<div class="cmd-empty">无匹配项，请输入其他指令</div>';
+    return;
+  }
+
+  cmdSelectedIndex = Math.min(cmdSelectedIndex, cmdItems.length - 1);
+  listEl.innerHTML = cmdItems
+    .map(
+      (item, idx) => `
+    <div class="cmd-item${idx === cmdSelectedIndex ? ' is-selected' : ''}" data-cmd-idx="${idx}">
+      <div class="cmd-item-left">
+        <span class="cmd-item-cat">${item.type}</span>
+        <span class="cmd-item-title">${esc(item.title)}</span>
+      </div>
+      <span class="cmd-item-meta">${esc(item.meta)}</span>
+    </div>`
+    )
+    .join('');
+}
+
+function execSelectedCmd() {
+  if (cmdItems[cmdSelectedIndex]) {
+    const action = cmdItems[cmdSelectedIndex].action;
+    closeCmdPalette();
+    if (action) action();
+  }
+}
+
+/* ---------------- 初始化与事件绑定 ---------------- */
 function init() {
   $('#brand-name').innerHTML = `${esc(SITE.name)}<em>.</em>`;
   $('#brand-sub').textContent = SITE.latin;
@@ -466,9 +1008,12 @@ function init() {
   renderNotes();
   renderAbout();
 
-  // 默认暗色；用户手动切换过则记住其选择
-  const saved = (() => { try { return localStorage.getItem('blog-theme'); } catch (e) { return null; } })();
-  setTheme(saved || 'dark');
+  // 主题恢复
+  const savedTheme = (() => { try { return localStorage.getItem('blog-theme'); } catch (e) { return null; } })();
+  setTheme(savedTheme || 'dark');
+
+  // 音效按钮状态初始化
+  if (soundEnabled) $('#soundToggle').classList.add('is-on');
 
   // 事件委托
   document.addEventListener('click', (e) => {
@@ -483,39 +1028,165 @@ function init() {
 
     if (e.target.closest('[data-close]') || e.target.id === 'sheet-bg') return closeSheet();
 
+    // 项目分类筛选
     const chip = e.target.closest('.chip');
-    if (chip) {
+    if (chip && chip.dataset.cat) {
+      currentCat = chip.dataset.cat;
       $$('.chip').forEach((c) => c.classList.toggle('is-active', c === chip));
-      return paintList(chip.dataset.cat);
+      playSound(700, 'sine', 0.02);
+      return paintProjects();
+    }
+
+    // 视图模式切换 (list / bento)
+    const vbtn = e.target.closest('[data-vmode]');
+    if (vbtn) {
+      viewMode = vbtn.dataset.vmode;
+      localStorage.setItem('frog-view-mode', viewMode);
+      $$('.view-btn').forEach((b) => b.classList.toggle('is-active', b === vbtn));
+      playSound(750, 'sine', 0.02);
+      return paintProjects();
+    }
+
+    // 技能点击联动搜索
+    const techLi = e.target.closest('[data-search-tech]');
+    if (techLi) {
+      const tech = techLi.dataset.searchTech;
+      go('projects', false);
+      searchQuery = tech.toLowerCase();
+      currentCat = 'all';
+      renderProjects();
+      showToast(`已筛选技术栈: ${tech}`);
+      return;
+    }
+
+    // 点击复制
+    const copyTarget = e.target.closest('[data-copy]');
+    if (copyTarget) {
+      return copyText(copyTarget.dataset.copy);
+    }
+
+    // 身份卡复制
+    if (e.target.closest('#copyIntroBtn')) {
+      return copyText(`青蛙 (FROG755) — ${SITE.bio}\nEmail: ${SITE.emails[0].addr}\nGitHub: ${SITE.contactUrl}`, '已复制个人名片');
+    }
+
+    // Command Palette 项点击
+    const cmdItem = e.target.closest('[data-cmd-idx]');
+    if (cmdItem) {
+      cmdSelectedIndex = parseInt(cmdItem.dataset.cmdIdx, 10);
+      return execSelectedCmd();
     }
   });
 
+  // 主题切换按钮
   $('#themeToggle').addEventListener('click', () => {
     setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   });
 
+  // 粒子开关
   $('#fxToggle').addEventListener('click', () => {
     const off = document.body.classList.toggle('no-particles');
     $('#fxToggle').classList.toggle('is-on', !off);
+    playSound(600, 'sine', 0.03);
   });
 
+  // 音效开关
+  $('#soundToggle').addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('frog-sound', soundEnabled ? '1' : '0');
+    $('#soundToggle').classList.toggle('is-on', soundEnabled);
+    if (soundEnabled) playSound(800, 'sine', 0.04);
+    showToast(soundEnabled ? '按键音效已开启' : '按键音效已关闭');
+  });
+
+  // Command Palette 触发器与键盘快捷键
+  $('#cmdTrigger').addEventListener('click', openCmdPalette);
+  $('#cmdBackdrop').addEventListener('click', closeCmdPalette);
+
+  const cmdInput = $('#cmdInput');
+  if (cmdInput) {
+    cmdInput.addEventListener('input', (e) => {
+      cmdSelectedIndex = 0;
+      renderCmdResults(e.target.value);
+    });
+    cmdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        cmdSelectedIndex = Math.min(cmdSelectedIndex + 1, cmdItems.length - 1);
+        renderCmdResults(cmdInput.value);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        cmdSelectedIndex = Math.max(cmdSelectedIndex - 1, 0);
+        renderCmdResults(cmdInput.value);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        execSelectedCmd();
+      } else if (e.key === 'Escape') {
+        closeCmdPalette();
+      }
+    });
+  }
+
+  // 全局键盘监听
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') return closeSheet();
+    // Cmd+K / Ctrl+K 打开命令面板
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const modal = $('#cmdPalette');
+      if (modal && !modal.hasAttribute('hidden')) {
+        closeCmdPalette();
+      } else {
+        openCmdPalette();
+      }
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      closeCmdPalette();
+      closeSheet();
+      return;
+    }
+
+    // 抽屉展开时 Left / Right 导航项目
+    if ($('#sheet').classList.contains('is-open')) {
+      if (e.key === 'ArrowLeft' && currentProjectIndex > 0) {
+        openProject(PROJECTS[currentProjectIndex - 1].id);
+      } else if (e.key === 'ArrowRight' && currentProjectIndex < PROJECTS.length - 1) {
+        openProject(PROJECTS[currentProjectIndex + 1].id);
+      }
+      return;
+    }
+
+    // 如果焦点在输入框中，忽略数字键
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
     const n = parseInt(e.key, 10);
-    if (!isNaN(n) && n < VIEWS.length && !e.metaKey && !e.ctrlKey) go(VIEWS[n].id);
+    if (!isNaN(n) && n >= 1 && n <= VIEWS.length && !e.metaKey && !e.ctrlKey) {
+      go(VIEWS[n - 1].id);
+    }
   });
 
+  // 时钟更新 (实时秒针跳动)
   const clock = $('#clock');
   const tick = () => {
     const d = new Date();
     const p = (x) => String(x).padStart(2, '0');
-    clock.textContent = `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    clock.textContent = `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   };
   tick();
-  setInterval(tick, 30000);
+  setInterval(tick, 1000);
 
+  // 初始粒子与路由判断
   initParticles();
-  go((location.hash || '').replace('#', '') || 'index');
+
+  const hash = (location.hash || '').replace('#', '');
+  if (hash.startsWith('project/')) {
+    const pid = hash.replace('project/', '');
+    go('projects', false);
+    setTimeout(() => openProject(pid), 100);
+  } else {
+    go(hash || 'index', false);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

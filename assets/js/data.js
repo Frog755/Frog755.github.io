@@ -58,7 +58,9 @@ const PROJECTS = [
       '任务文档内含评审历史与修复轮次，修复次数有上界，防止无限重试烧 token'
     ],
     stack: ['Node.js', 'JSON Schema', 'PowerShell', 'File-backed FSM'],
-    links: []
+    links: [
+      { label: '查看架构文档', url: '#notes' }
+    ]
   },
   {
     num: '02',
@@ -82,7 +84,9 @@ const PROJECTS = [
       '产物自包含、可移植，不绑定任何特定 Agent'
     ],
     stack: ['Node.js', 'Playwright', 'Agent Skills Spec'],
-    links: []
+    links: [
+      { label: 'GitHub 组织', url: 'https://github.com/Frog755' }
+    ]
   },
   {
     num: '03',
@@ -127,7 +131,7 @@ const PROJECTS = [
       '覆盖成功、失败重试、记忆命中、工具异常等多类事件',
       '以自身任务分布为准，拒绝照搬通用 benchmark 结论'
     ],
-    stack: ['CSV', '统计分析'],
+    stack: ['CSV', '统计分析', '自动化评测'],
     links: []
   },
   {
@@ -285,7 +289,7 @@ const PROJECTS = [
       '音色克隆：mimo-v2.5-tts-voiceclone',
       'Windows 批处理封装，命令行一行出声'
     ],
-    stack: ['Python', 'REST API', 'Audio'],
+    stack: ['Python', 'REST API', 'Audio Processing'],
     links: []
   },
   {
@@ -372,7 +376,7 @@ const PROJECTS = [
       '目的是回答具体问题——「这个任务用哪个模型性价比最高」——而不是产出一个漂亮的排行榜。'
     ],
     points: ['延迟探测 latency-probe', '批量基准 bench-suite / run-bench', '结果重评 regrade', '自动生成 report.md'],
-    stack: ['Node.js', 'Benchmark'],
+    stack: ['Node.js', 'Benchmark', 'Automation'],
     links: []
   },
   {
@@ -410,7 +414,8 @@ const NOTES = [
     title: 'DeepSeek Harness 429 自动重试插件原理',
     kind: '技术文章',
     desc: '已发布于掘金的终稿。把插件逻辑讲成一个拟人故事：转圈圈、贴标签、小耳朵、懂分寸重试 5 次停手。',
-    tag: 'DSH'
+    tag: 'DSH',
+    readTime: '5 MIN READ'
   },
   {
     num: '02',
@@ -418,7 +423,8 @@ const NOTES = [
     title: 'TrendRadar × GitHub Actions 部署教学',
     kind: '视频 + 文档',
     desc: '面向零编程基础用户，真实界面截图逐步演示 Use this template → Secrets → Run workflow，配 MiMo 女声口播。',
-    tag: '教程'
+    tag: '教程',
+    readTime: '6 MIN READ'
   },
   {
     num: '03',
@@ -426,7 +432,8 @@ const NOTES = [
     title: 'Agent Hub 设计文档',
     kind: '设计文档',
     desc: '约 38KB 的完整设计说明：协议、任务状态机、事务日志、runner 与评审环路的全部细节。',
-    tag: '架构'
+    tag: '架构',
+    readTime: '12 MIN READ'
   },
   {
     num: '04',
@@ -434,7 +441,8 @@ const NOTES = [
     title: '去 AI 味：技术文章改写工作流',
     kind: '方法论',
     desc: '集成 qu-ai-wei 工具链，把 Agent 生成的初稿改写成读起来像人写的中文技术文章。',
-    tag: '写作'
+    tag: '写作',
+    readTime: '4 MIN READ'
   },
   {
     num: '05',
@@ -442,7 +450,8 @@ const NOTES = [
     title: '本地评测集：用真实任务度量 Agent 可靠性',
     kind: '方法论',
     desc: '拒绝照搬外部 benchmark 数字，改为记录自己每天真实任务的成败与重试，用数据决定优化优先级。',
-    tag: '评测'
+    tag: '评测',
+    readTime: '5 MIN READ'
   }
 ];
 
@@ -450,19 +459,27 @@ const NOTES = [
 const ABOUT = {
   paragraphs: [
     SITE.bio,
-    '我做 AI 工程的方式有点偏实践派：先让东西真的跑起来，再回头补抽象。这个索引站收录的都是实际跑通的项目，不是规划中的想法。',
-    '最近的主要精力放在多智能体协同上——怎么让几个不同性格的 Agent 在同一套状态机上可靠地交接工作，而不是各干各的。'
+    '我做 AI 工程的方式偏向极致实践：先让东西在真实环境下跑通落地，再回头抽提架构与抽象。这个索引站收录的全部是本地可复现、跑通闭环的真实工程，拒绝虚头巴脑的概念稿。',
+    '目前核心重心聚焦在多智能体协同（Multi-Agent Orchestration）——探讨如何通过严格的状态机、不可变事务日志与清晰的职责切分，让不同 Agent 各司其职、可靠交接。'
   ],
   stackGroups: [
     { label: 'HARDWARE', items: ['C / C++', 'STM32 MCU', 'Infineon AURIX TC', 'Altium Designer', 'PID 控制'] },
-    { label: 'LANGUAGES', items: ['TypeScript / JavaScript', 'Python', 'PowerShell', 'Bash'] },
-    { label: 'AI / AGENTS', items: ['DeepSeek Harness', 'Claude Code', 'Agnes 2.5', 'MCP', 'Agent Skills'] },
-    { label: 'AUTOMATION', items: ['Playwright', 'GitHub Actions', 'HyperFrames', 'MiMo TTS'] }
+    { label: 'LANGUAGES', items: ['TypeScript / JavaScript', 'Python 3.12', 'PowerShell', 'Bash / Shell'] },
+    { label: 'AI / AGENTS', items: ['DeepSeek Harness', 'Claude Code', 'Agnes 2.5', 'MCP 协议', 'Agent Skills'] },
+    { label: 'AUTOMATION', items: ['Playwright', 'GitHub Actions', 'HyperFrames', 'MiMo TTS', 'FFmpeg'] }
   ],
   facts: [
-    { k: 'Who', v: SITE.who + ' / FROG755' },
-    { k: 'Focus', v: 'AI Agents · Automation · Embedded' },
-    { k: '收录项目', v: String(PROJECTS.length) },
-    { k: 'Email', v: SITE.emails[0].addr }
+    { k: 'Operator', v: SITE.who + ' / FROG755' },
+    { k: 'Core Focus', v: 'AI Agents · Automation · Embedded Systems' },
+    { k: 'Projects Logged', v: String(PROJECTS.length) + ' Repositories' },
+    { k: 'Primary Email', v: SITE.emails[0].addr },
+    { k: 'GitHub Node', v: SITE.contact }
+  ],
+  cli: [
+    { k: 'TARGET', v: 'FROG755 // QINGWA' },
+    { k: 'SYS_ARCH', v: 'TriCore TC264 + x86_64 / Windows 11 + Linux' },
+    { k: 'CORE_STACK', v: 'TypeScript, Python, C, PowerShell, Playwright' },
+    { k: 'METHODOLOGY', v: 'Swiss International Typographic Style · Zero Redundancy' },
+    { k: 'STATUS', v: 'ALL SUBSYSTEMS NOMINAL · READY FOR WORK ■' }
   ]
 };

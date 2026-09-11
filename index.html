@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QINGWA — Project Index</title>
 <meta name="description" content="青蛙 / FROG755 的个人索引站：AI 多智能体协同、开发者工具、内容生产流水线、数据监控与嵌入式项目。">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="stylesheet" href="assets/css/style.css">
-<!-- 粒子背景依赖；加载失败时页面自动降级，不影响其余功能 -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- 本地优先加载 Three.js 保证零外部阻断；加载失败时页面自动降级 -->
+<script src="assets/js/three.min.js"></script>
 </head>
 <body>
 
@@ -31,9 +32,15 @@
     <nav class="tabs" id="tabs" role="tablist" aria-label="主入口切换"></nav>
 
     <div class="masthead-right">
+      <button class="cmd-trigger mono" id="cmdTrigger" title="全局搜索 (Ctrl+K / ⌘K)">
+        <span class="cmd-trigger-icon">⌕</span>
+        <span class="cmd-trigger-text">SEARCH</span>
+        <span class="cmd-trigger-kbd">⌘K</span>
+      </button>
       <span class="clock mono" id="clock"></span>
+      <button class="icon-btn" id="soundToggle" title="按键触觉音效" aria-label="按键微音效">♪</button>
       <button class="icon-btn is-on" id="fxToggle" title="切换粒子背景" aria-label="切换粒子背景">&#10022;</button>
-      <button class="icon-btn" id="themeToggle" title="切换明暗" aria-label="切换明暗">&#9686;</button>
+      <button class="icon-btn" id="themeToggle" title="切换明暗主题" aria-label="切换明暗主题">&#9686;</button>
     </div>
   </div>
 </header>
@@ -51,14 +58,36 @@
     <span class="mono" id="foot-status"></span>
     <span class="mono" id="foot-contact"></span>
     <a class="mono foot-mail" id="foot-email" href="#"></a>
-    <span class="mono">SWISS GRID · 12 COL · HELVETICA</span>
+    <span class="mono">SWISS GRID · 12 COL · HELVETICA &amp; JETBRAINS MONO</span>
   </div>
 </footer>
 
+<!-- 详情抽屉面板 -->
 <div class="sheet" id="sheet" role="dialog" aria-modal="true">
   <div class="sheet-bg" id="sheet-bg"></div>
   <div class="sheet-panel" id="sheet-body"></div>
 </div>
+
+<!-- Command Palette 全局命令 / 快捷搜索面板 -->
+<div class="cmd-palette" id="cmdPalette" role="dialog" aria-modal="true" hidden>
+  <div class="cmd-backdrop" id="cmdBackdrop"></div>
+  <div class="cmd-modal">
+    <div class="cmd-head">
+      <span class="cmd-search-icon">⌕</span>
+      <input type="text" class="cmd-input" id="cmdInput" placeholder="搜索项目、笔记、技术栈或快速跳转 (ESC 关闭)..." autocomplete="off" spellcheck="false">
+      <span class="cmd-esc mono">ESC</span>
+    </div>
+    <div class="cmd-body" id="cmdList"></div>
+    <div class="cmd-foot mono">
+      <span><kbd>↑</kbd><kbd>↓</kbd> 移动选择</span>
+      <span><kbd>↵</kbd> 打开</span>
+      <span><kbd>ESC</kbd> 退出</span>
+    </div>
+  </div>
+</div>
+
+<!-- Toast 气泡通知 -->
+<div class="toast mono" id="toast" aria-live="polite"></div>
 
 <script src="assets/js/data.js"></script>
 <script src="assets/js/app.js"></script>
