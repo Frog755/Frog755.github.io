@@ -554,10 +554,17 @@ html[data-theme="light"] .tab.is-active {
   position: relative;
   height: 164px;
   overflow: hidden;
+  transition: background .25s ease, border-color .25s ease;
 }
+
+/* 浅色主题下的示波器：瑞士白底工程图表质感 (MIL-SPEC TECHNICAL RECORDER) */
 html[data-theme="light"] .scope-wrap {
-  background: #0c1017;
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
 }
+
 .scope-canvas {
   display: block;
   width: 100%;
@@ -583,6 +590,26 @@ html[data-theme="light"] .scope-wrap {
   color: #ffbd2e;
   font-weight: 600;
   text-shadow: 0 0 6px rgba(255,189,46,0.4);
+}
+
+/* 浅色模式下 HUD 字体颜色适配 */
+html[data-theme="light"] .scope-hud {
+  color: rgba(0, 0, 0, 0.55);
+}
+html[data-theme="light"] .scope-hud-ch1 {
+  color: #007a3d;
+  font-weight: 700;
+  text-shadow: none;
+}
+html[data-theme="light"] .scope-hud-ch2 {
+  color: #006b85;
+  font-weight: 700;
+  text-shadow: none;
+}
+html[data-theme="light"] .scope-hud-measure {
+  color: #b35900;
+  font-weight: 700;
+  text-shadow: none;
 }
 
 .scope-controls {
@@ -627,6 +654,29 @@ html[data-theme="light"] .scope-wrap {
   background: #00ff66;
   color: #000;
   font-weight: 700;
+}
+
+/* 浅色主题下示波器按钮适配 */
+html[data-theme="light"] .scope-mode-btn {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+html[data-theme="light"] .scope-mode-btn:hover,
+html[data-theme="light"] .scope-mode-btn.is-active {
+  background: #007a3d;
+  color: #ffffff;
+  border-color: #007a3d;
+}
+html[data-theme="light"] .scope-action-btn {
+  background: rgba(0, 122, 61, 0.08);
+  color: #007a3d;
+  border: 1px solid rgba(0, 122, 61, 0.35);
+}
+html[data-theme="light"] .scope-action-btn:hover,
+html[data-theme="light"] .scope-action-btn.is-active {
+  background: #007a3d;
+  color: #ffffff;
 }
 
 /* ---------- 核心数据指标 (HERO FOOT STATS) ---------- */

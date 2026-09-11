@@ -947,9 +947,11 @@ function drawScope() {
   const w = c.width, h = c.height, mid = h / 2;
   ctx.clearRect(0, 0, w, h);
 
+  const dark = isDark();
+
   // 1. 示波器标尺背景网格 (Graticule)
   ctx.save();
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+  ctx.strokeStyle = dark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.07)';
   ctx.lineWidth = 1;
   const gridX = 40, gridY = 24;
   for (let x = 0; x < w; x += gridX) {
@@ -958,16 +960,25 @@ function drawScope() {
   for (let y = 0; y < h; y += gridY) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
   }
-  // 中心十字轴线
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+  // 中心十字刻度轴线与十字分度标记
+  ctx.strokeStyle = dark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.18)';
   ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
+
+  // 中心十字上的精准标尺刻度 tick (瑞士精密仪器细节)
+  ctx.strokeStyle = dark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)';
+  for (let x = 0; x < w; x += 8) {
+    ctx.beginPath(); ctx.moveTo(x, mid - 2); ctx.lineTo(x, mid + 2); ctx.stroke();
+  }
+  for (let y = 0; y < h; y += 8) {
+    ctx.beginPath(); ctx.moveTo(w / 2 - 2, y); ctx.lineTo(w / 2 + 2, y); ctx.stroke();
+  }
   ctx.restore();
 
-  // 2. CH2 参考谐波 / 次级波形 (Cyan)
+  // 2. CH2 参考谐波 / 次级波形 (Dark: 荧光青蓝 / Light: 沉稳工业深海蓝)
   ctx.beginPath();
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
-  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = dark ? 'rgba(0, 240, 255, 0.45)' : 'rgba(0, 107, 133, 0.55)';
+  ctx.lineWidth = dark ? 1.2 : 1.5;
   for (let x = 0; x < w; x += 2) {
     const amp = Math.sin((x / w) * Math.PI) * (h * 0.18);
     const y = mid + Math.sin(x * 0.03 - scopePhase * 0.6) * amp;
@@ -975,13 +986,17 @@ function drawScope() {
   }
   ctx.stroke();
 
-  // 3. CH1 主波形 (Frog Neon Green)
-  const color = '#00ff66';
+  // 3. CH1 主波形 (Dark: 赛博荧光绿带辉光 / Light: 瑞士经典深翠绿高清晰线条)
+  const color = dark ? '#00ff66' : '#007a3d';
   ctx.beginPath();
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.8;
-  ctx.shadowBlur = 10;
-  ctx.shadowColor = color;
+  ctx.lineWidth = dark ? 1.8 : 2.2;
+  if (dark) {
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = color;
+  } else {
+    ctx.shadowBlur = 0;
+  }
 
   for (let x = 0; x < w; x++) {
     const envelope = Math.sin((x / w) * Math.PI);
