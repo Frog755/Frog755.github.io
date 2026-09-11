@@ -1033,51 +1033,108 @@ function initParticles() {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-    const geometry = new THREE.PlaneGeometry(80, 55, 180, 120);
+    const geometry = new THREE.PlaneGeometry(80, 55, 200, 140);
     const vertexShader = `
-      uniform float uTime; uniform vec3 uMouse;
-      varying float vDist; varying float vElevation;
+      uniform float uTime;
+      uniform vec3 uMouse;
+      uniform float uIsDark;
+      varying float vDist;
+      varying float vElevation;
+      varying float vWave;
+
       void main() {
         float d = distance(position.xy, uMouse.xy);
         vDist = d;
+        
+        // 1. 全屏呼吸微波起伏
         float baseWave = sin(position.x * 0.15 + uTime * 1.2) * cos(position.y * 0.15 + uTime * 1.2) * 0.2;
-        float mouseWave = sin(d - uTime * 6.0) * smoothstep(14.0, 0.0, d);
-        vec3 p = position; p.z += baseWave + mouseWave;
-        vElevation = baseWave + mouseWave;
+        
+        // 2. 鼠标动态水波纹：振幅充盈，多层同心涟漪
+        float waveFactor = smoothstep(22.0, 0.0, d);
+        float mouseWave = sin(d * 1.25 - uTime * 6.5) * 1.3 * waveFactor;
+        
+        vec3 p = position;
+        p.z += baseWave + mouseWave;
+        vElevation = p.z;
+        vWave = mouseWave;
+        
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = (16.0 / -mv.z) * (smoothstep(14.0, 0.0, d) * 2.2 + 0.8);
-      }`;
-    const fragmentShader = `
-      uniform vec3 uColor;
-      varying float vDist; varying float vElevation;
-      void main() {
-        vec2 t = gl_PointCoord - vec2(0.5);
-        float f = dot(t, t);
-        if (f > 0.25) discard;
-        float alpha = smoothstep(14.0, 4.0, vDist) * 0.7 + 0.04;
-        float waveGlow = smoothstep(-1.2, 1.2, vElevation) * 0.4 + 0.6;
-        float glow = 1.0 - f * 4.0;
-        gl_FragColor = vec4(uColor, alpha * glow * waveGlow);
+        
+        // 3. 粒子尺寸控制：
+        // 浅色模式下：波峰处的深黑点显著放大至 8px~14px，远处保持 2.5px~3.5px 清晰工程网格点
+        float sizeScale;
+        if (uIsDark > 0.5) {
+          sizeScale = waveFactor * 2.5 + 0.9;
+        } else {
+          float crestFactor = max(0.0, sin(d * 1.25 - uTime * 6.5));
+          sizeScale = (waveFactor * 3.4 * (0.5 + 0.5 * crestFactor)) + 1.2;
+        }
+        
+        gl_PointSize = (22.0 / -mv.z) * sizeScale;
       }`;
 
-    const getParticleColor = () => (isDark() ? new THREE.Color('#00ff66') : new THREE.Color('#0a4d29'));
+    const fragmentShader = `
+      uniform float uIsDark;
+      varying float vDist;
+      varying float vElevation;
+      varying float vWave;
+
+      void main() {
+        // 严格抗锯齿圆形裁切
+        vec2 pt = gl_PointCoord - vec2(0.5);
+        float distSq = dot(pt, pt);
+        if (distSq > 0.25) discard;
+        
+        float circleEdge = 1.0 - smoothstep(0.16, 0.25, distSq);
+        float waveFactor = smoothstep(22.0, 0.0, vDist);
+        
+        if (uIsDark > 0.5) {
+          // --- 暗色主题：荧光绿赛博终端光圈 ---
+          vec3 baseCol = vec3(0.0, 0.35, 0.15); // 暗绿基底
+          vec3 peakCol = vec3(0.0, 1.0, 0.4);   // 高亮荧光绿
+          vec3 col = mix(baseCol, peakCol, waveFactor * 0.85 + 0.15);
+          float alpha = mix(0.12, 0.95, waveFactor) * circleEdge;
+          gl_FragColor = vec4(col, alpha);
+        } else {
+          // --- 浅色主题：高对比度纯深黑 / 水墨重彩波点涟漪 ---
+          // 远离鼠标处：深邃清晰的石墨深灰色 (#242930)
+          // 鼠标动态划过的涟漪中心与同心波峰：极致纯深黑 (#000000)
+          vec3 baseCol = vec3(0.15, 0.18, 0.22); // 远处全屏微网格点：清晰深石墨色
+          vec3 rippleCol = vec3(0.0, 0.0, 0.0);   // 动态涟漪处：绝对纯深黑色！
+          
+          float crest = smoothstep(-0.6, 0.8, vWave);
+          vec3 col = mix(baseCol, rippleCol, waveFactor);
+          
+          // 远离处 alpha 保持在 0.28 (高清晰度工程纸底点阵)
+          // 涟漪波峰处 alpha 飙升至 0.98 (极深纯黑高对比水波)
+          float alpha = mix(0.28, 0.98, waveFactor * (0.6 + 0.4 * crest)) * circleEdge;
+          gl_FragColor = vec4(col, alpha);
+        }
+      }`;
 
     const uniforms = {
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector3(0, 0, 0) },
-      uColor: { value: getParticleColor() }
-    };
-
-    window.updateParticleTheme = () => {
-      uniforms.uColor.value.copy(getParticleColor());
+      uIsDark: { value: isDark() ? 1.0 : 0.0 }
     };
 
     const material = new THREE.ShaderMaterial({
-      vertexShader, fragmentShader, uniforms,
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+      vertexShader,
+      fragmentShader,
+      uniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: isDark() ? THREE.AdditiveBlending : THREE.NormalBlending
     });
     scene.add(new THREE.Points(geometry, material));
+
+    window.updateParticleTheme = () => {
+      const dark = isDark();
+      uniforms.uIsDark.value = dark ? 1.0 : 0.0;
+      material.blending = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
+      material.needsUpdate = true;
+    };
 
     const mouse = new THREE.Vector2(0, 0);
     const target = new THREE.Vector3(0, 0, 0);
@@ -1139,7 +1196,7 @@ function initCanvasFallbackParticles() {
     requestAnimationFrame(loop);
     if (document.body.classList.contains('no-particles')) return;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = isDark() ? '#00ff66' : '#0a4d29';
+    ctx.fillStyle = isDark() ? '#00ff66' : '#040608';
     particles.forEach((p) => {
       p.x += p.vx; p.y += p.vy;
       if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;

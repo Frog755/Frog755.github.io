@@ -88,7 +88,7 @@ html[data-theme="dark"] body::before {
   background-size: 100% 100%, 28px 28px;
 }
 
-/* 浅色模式：高清晰度深黑/石墨色精密工程图纸点阵（彻底解决看不清问题） */
+/* 浅色模式：微环境环境光，静止备用点阵（WebGL 粒子提供全屏动态点阵） */
 html[data-theme="light"] body::before {
   content: "";
   position: fixed;
@@ -96,9 +96,15 @@ html[data-theme="light"] body::before {
   pointer-events: none;
   z-index: 0;
   background-image:
-    radial-gradient(circle at 50% 15%, rgba(0, 122, 61, 0.06) 0%, transparent 55%),
-    radial-gradient(circle, rgba(14, 16, 22, 0.26) 1.5px, transparent 1.5px);
-  background-size: 100% 100%, 26px 26px;
+    radial-gradient(circle at 50% 12%, rgba(0, 122, 61, 0.04) 0%, transparent 60%);
+  background-size: 100% 100%;
+}
+
+/* 粒子关闭时的静态备用工程网点 */
+body.no-particles::before {
+  background-image:
+    radial-gradient(circle, rgba(14, 16, 22, 0.24) 1.5px, transparent 1.5px) !important;
+  background-size: 26px 26px !important;
 }
 
 ::selection {
@@ -149,12 +155,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 html[data-theme="dark"] #particle-canvas {
   opacity: .95;
-  mix-blend-mode: screen;
 }
-/* 浅色主题下使用 multiply 混合模式，深绿水波涟漪深邃清晰 */
+/* 浅色主题：粒子采用纯正深黑色 NormalBlending 渲染，完全不透明直接叠加在纸张底色上 */
 html[data-theme="light"] #particle-canvas {
-  opacity: .85;
-  mix-blend-mode: multiply;
+  opacity: 1;
 }
 body.no-particles #particle-canvas { display: none; }
 
