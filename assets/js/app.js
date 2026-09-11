@@ -1,7 +1,8 @@
 /* ============================================================
    SWISS STYLE × QINGWA // FROG755
-   View Routing · Dual-Channel Oscilloscope · Particle Mesh ·
-   Live Search & Bento Toggle · Project Drawer Nav · Command Palette
+   View Routing · Dual-Channel Oscilloscope & Audio Synth · 
+   Particle Mesh with Light/Dark Multiply Blending ·
+   Typewriter Loop · Note Reader Drawer · Command Palette · CLI Simulation
    ============================================================ */
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -17,6 +18,7 @@ const VIEWS = [
 ];
 
 const catLabel = (id) => (CATEGORIES.find((c) => c.id === id) || {}).label || id;
+const isDark = () => document.documentElement.dataset.theme === 'dark';
 const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#00ff66';
 
 /* ---------------- 全局状态 ---------------- */
@@ -26,16 +28,29 @@ let searchQuery = '';
 let viewMode = localStorage.getItem('frog-view-mode') || 'list'; // 'list' | 'bento'
 let soundEnabled = localStorage.getItem('frog-sound') === '1';
 let currentProjectIndex = -1;
+let currentNoteIndex = -1;
 let cmdItems = [];
 let cmdSelectedIndex = 0;
 
-/* ---------------- 微音效引擎 (Web Audio API) ---------------- */
+/* ---------------- 微音效与示波器声音发生器 (Web Audio API) ---------------- */
 let audioCtx = null;
+let synthOsc = null;
+let synthGain = null;
+let isScopeAudioPlaying = false;
+
+function initAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
 function playSound(freq = 750, type = 'sine', duration = 0.04) {
   if (!soundEnabled) return;
   try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    initAudioContext();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = type;
@@ -48,6 +63,60 @@ function playSound(freq = 750, type = 'sine', duration = 0.04) {
     osc.start();
     osc.stop(audioCtx.currentTime + duration);
   } catch (e) {}
+}
+
+function toggleScopeAudio() {
+  initAudioContext();
+  if (isScopeAudioPlaying) {
+    stopScopeAudio();
+    showToast('示波器音频信号: 已静音');
+  } else {
+    startScopeAudio();
+    showToast('示波器音频信号: 实时监听中 (移动鼠标调频)');
+  }
+}
+
+function startScopeAudio() {
+  try {
+    initAudioContext();
+    if (synthOsc) stopScopeAudio();
+    synthOsc = audioCtx.createOscillator();
+    synthGain = audioCtx.createGain();
+    synthOsc.type = scopeMode === 'pulse' ? 'square' : 'sine';
+    synthOsc.frequency.setValueAtTime(440, audioCtx.currentTime);
+    synthGain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    synthOsc.connect(synthGain);
+    synthGain.connect(audioCtx.destination);
+    synthOsc.start();
+    isScopeAudioPlaying = true;
+    const btn = $('#scopeAudioBtn');
+    if (btn) btn.classList.add('is-active');
+  } catch (e) {}
+}
+
+function stopScopeAudio() {
+  if (synthOsc) {
+    try {
+      synthGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.05);
+      synthOsc.stop(audioCtx.currentTime + 0.05);
+    } catch (e) {}
+    synthOsc = null;
+    synthGain = null;
+  }
+  isScopeAudioPlaying = false;
+  const btn = $('#scopeAudioBtn');
+  if (btn) btn.classList.remove('is-active');
+}
+
+function updateScopeAudioFreq(freq) {
+  if (isScopeAudioPlaying && synthOsc && audioCtx) {
+    try {
+      synthOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.02);
+      if (scopeMode === 'pulse') synthOsc.type = 'square';
+      else if (scopeMode === 'harmonic') synthOsc.type = 'sawtooth';
+      else synthOsc.type = 'sine';
+    } catch (e) {}
+  }
 }
 
 /* ---------------- Toast 气泡通知 ---------------- */
@@ -96,7 +165,7 @@ function renderTabs() {
   ).join('');
 }
 
-/* ---------------- 渲染 00 INDEX ---------------- */
+/* ---------------- 00 INDEX 渲染 ---------------- */
 function renderIndex() {
   const featured = PROJECTS.filter((p) => p.featured).slice(0, 3);
   const totalP = PROJECTS.length;
@@ -106,6 +175,9 @@ function renderIndex() {
   $('#view-index').innerHTML = `
     <section class="hero">
       <div class="wrap">
+        <div class="crosshair crosshair-tl mono">+ // 0.00</div>
+        <div class="crosshair crosshair-tr mono">+ // 12.0</div>
+
         <div class="telemetry mono">
           <span class="status-dot"></span>
           <span class="active">SYSTEM STATUS: ALL NOMINAL</span>
@@ -117,7 +189,10 @@ function renderIndex() {
 
         <div class="hero-grid">
           <div class="hero-title-box">
-            <h1 class="hero-title">BUILDING<br>SOFTWARE THAT<br><em>WORKS ITSELF.</em></h1>
+            <h1 class="hero-title">
+              BUILDING<br>SOFTWARE THAT<br>
+              <em id="heroTypewriter">WORKS ITSELF.</em><span class="typewriter-cursor"></span>
+            </h1>
             <p class="hero-subtag">${esc(SITE.intro)}</p>
           </div>
 
@@ -140,16 +215,19 @@ function renderIndex() {
         </div>
       </div>
 
-      <!-- 数字示波器 -->
+      <!-- 数字存储示波器 (DSO) -->
       <div class="scope-wrap">
         <div class="scope-hud mono">
-          <span class="scope-hud-ch1">CH1: 500mV/DIV · SINE MOD</span>
+          <span class="scope-hud-ch1" id="scopeCh1Tag">CH1: 500mV/DIV · SINE</span>
           <span class="scope-hud-ch2">CH2: 1.00V/DIV · HARMONIC</span>
-          <span>TIME: 2.0ms/DIV</span>
-          <span>TRIG: AUTO [READY]</span>
+          <span class="scope-hud-measure" id="scopeMeasureTag">FREQ: 1.25 kHz · Vpp: 3.30V</span>
+          <span id="scopeStatusTag">TRIG: AUTO [SCANNING]</span>
         </div>
         <canvas id="oscilloscope" class="scope-canvas"></canvas>
         <div class="scope-controls">
+          <button class="scope-action-btn" id="scopeAudioBtn" title="开启声音调制合成器">AUDIO 🔈</button>
+          <button class="scope-action-btn" id="scopeFreezeBtn" title="冻结采样 / 继续运行">FREEZE ⏸</button>
+          <span style="color:rgba(255,255,255,0.2)">|</span>
           <button class="scope-mode-btn is-active" data-smode="sine">SINE</button>
           <button class="scope-mode-btn" data-smode="pulse">PULSE</button>
           <button class="scope-mode-btn" data-smode="lissajous">LISSAJOUS</button>
@@ -162,17 +240,17 @@ function renderIndex() {
         <div class="hero-foot">
           <div class="stat-box">
             <div class="stat-k mono"><span>PROJECTS</span><span>01</span></div>
-            <div class="stat-v" data-count="${totalP}">${String(totalP).padStart(2, '0')}</div>
+            <div class="stat-v">${String(totalP).padStart(2, '0')}</div>
             <div class="stat-desc">收录验证项目，覆盖全闭环</div>
           </div>
           <div class="stat-box">
             <div class="stat-k mono"><span>AGENTS</span><span>02</span></div>
-            <div class="stat-v" data-count="${agentP}">${String(agentP).padStart(2, '0')}</div>
+            <div class="stat-v">${String(agentP).padStart(2, '0')}</div>
             <div class="stat-desc">多智能体协同、状态机与执行体</div>
           </div>
           <div class="stat-box">
             <div class="stat-k mono"><span>NOTES</span><span>03</span></div>
-            <div class="stat-v" data-count="${notesCount}">${String(notesCount).padStart(2, '0')}</div>
+            <div class="stat-v">${String(notesCount).padStart(2, '0')}</div>
             <div class="stat-desc">架构推演、部署教学与写作</div>
           </div>
           <div class="stat-box">
@@ -188,7 +266,7 @@ function renderIndex() {
     <div class="wrap">
       <section class="section">
         <div class="section-head">
-          <h2 class="section-title">Entries // 入口</h2>
+          <h2 class="section-title">Entries // 核心入口</h2>
           <span class="section-meta mono">键盘 [1]–[4] 快速跳转</span>
         </div>
         <div class="entries">
@@ -242,9 +320,51 @@ function renderIndex() {
 
   initScope();
   attachSpotlight();
+  startTypewriter();
 }
 
-/* ---------------- 渲染 01 PROJECTS ---------------- */
+/* ---------------- 打字机轮播标语 ---------------- */
+let typewriterIndex = 0;
+let typewriterTimer = null;
+
+function startTypewriter() {
+  const el = $('#heroTypewriter');
+  if (!el) return;
+  if (typewriterTimer) clearInterval(typewriterTimer);
+
+  let curText = HERO_PUNCHLINES[0];
+  let isDeleting = false;
+  let charIdx = curText.length;
+
+  function typeStep() {
+    const fullText = HERO_PUNCHLINES[typewriterIndex % HERO_PUNCHLINES.length];
+
+    if (isDeleting) {
+      charIdx--;
+      el.textContent = fullText.substring(0, charIdx);
+      if (charIdx <= 0) {
+        isDeleting = false;
+        typewriterIndex++;
+        setTimeout(typeStep, 350);
+        return;
+      }
+      setTimeout(typeStep, 45);
+    } else {
+      charIdx++;
+      el.textContent = fullText.substring(0, charIdx);
+      if (charIdx >= fullText.length) {
+        isDeleting = true;
+        setTimeout(typeStep, 3200); // 停顿供阅读
+        return;
+      }
+      setTimeout(typeStep, 80);
+    }
+  }
+
+  typewriterTimer = setTimeout(typeStep, 2600);
+}
+
+/* ---------------- 01 PROJECTS 渲染 ---------------- */
 function renderProjects() {
   $('#view-projects').innerHTML = `
     <div class="wrap">
@@ -255,10 +375,15 @@ function renderProjects() {
         </div>
 
         <div class="projects-toolbar">
-          <div class="search-bar">
-            <span class="search-icon">⌕</span>
-            <input type="text" class="search-input" id="searchInput" placeholder="实时搜索项目名称、描述或技术栈 (如 Playwright, Python, C, Agent)..." autocomplete="off" spellcheck="false" value="${esc(searchQuery)}">
-            <button class="search-clear" id="searchClear" title="清空搜索">✕</button>
+          <div class="search-bar-row">
+            <div class="search-bar">
+              <span class="search-icon">⌕</span>
+              <input type="text" class="search-input" id="searchInput" placeholder="实时搜索项目名称、描述或技术栈 (如 Playwright, Python, C, Agent)..." autocomplete="off" spellcheck="false" value="${esc(searchQuery)}">
+              <button class="search-clear" id="searchClear" title="清空搜索">✕</button>
+            </div>
+            <button class="random-btn" id="randomProjectBtn" title="随机抽取一个项目探索">
+              <span>🎲 随机探索</span>
+            </button>
           </div>
 
           <div class="filter-row">
@@ -301,6 +426,16 @@ function renderProjects() {
       clearBtn.style.display = 'none';
       paintProjects();
     });
+  }
+
+  const randBtn = $('#randomProjectBtn');
+  if (randBtn) {
+    randBtn.onclick = () => {
+      const p = PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
+      playSound(820, 'sine', 0.04);
+      openProject(p.id);
+      showToast(`🎲 随机抽中: ${p.title}`);
+    };
   }
 }
 
@@ -354,7 +489,6 @@ function paintProjects() {
           .join('')}
       </div>`;
   } else {
-    // Bento Grid 卡片视图
     container.innerHTML = `
       <div class="pbento">
         ${list
@@ -392,19 +526,19 @@ window.clearAllFilters = function () {
   renderProjects();
 };
 
-/* ---------------- 渲染 02 NOTES ---------------- */
+/* ---------------- 02 NOTES 渲染 ---------------- */
 function renderNotes() {
   $('#view-notes').innerHTML = `
     <div class="wrap">
       <section class="section">
         <div class="section-head">
           <h2 class="section-title">Notes &amp; Writings // 思考与方法论</h2>
-          <span class="section-meta mono">共 ${String(NOTES.length).padStart(2, '0')} 篇文章</span>
+          <span class="section-meta mono">共 ${String(NOTES.length).padStart(2, '0')} 篇 · 点击阅读详述</span>
         </div>
         <div class="notes-container">
           ${NOTES.map(
             (n) => `
-            <article class="note">
+            <article class="note" data-note-id="${n.id}">
               <div class="note-date">${esc(n.date)}</div>
               <div>
                 <h3 class="note-title">${esc(n.title)}</h3>
@@ -422,7 +556,68 @@ function renderNotes() {
   attachSpotlight();
 }
 
-/* ---------------- 渲染 03 ABOUT ---------------- */
+/* ---------------- 打开笔记阅读抽屉 ---------------- */
+function openNote(id) {
+  const idx = NOTES.findIndex((x) => x.id === id);
+  if (idx === -1) return;
+  currentNoteIndex = idx;
+  const n = NOTES[idx];
+
+  const hasPrev = idx > 0;
+  const hasNext = idx < NOTES.length - 1;
+
+  $('#sheet-body').innerHTML = `
+    <div class="sheet-nav">
+      <div class="sheet-nav-left mono">
+        <span>NOTE ${n.num} // ${esc(n.tag)} // ${esc(n.date)}</span>
+      </div>
+      <div class="sheet-nav-actions">
+        <button class="sheet-btn mono" id="notePrevBtn" ${hasPrev ? '' : 'disabled style="opacity:0.4;cursor:not-allowed"'}>
+          ← 上一篇
+        </button>
+        <button class="sheet-btn mono" id="noteNextBtn" ${hasNext ? '' : 'disabled style="opacity:0.4;cursor:not-allowed"'}>
+          下一篇 →
+        </button>
+        <button class="sheet-btn mono" id="noteCopyLinkBtn" title="复制链接">
+          分享 ↗
+        </button>
+        <button class="sheet-close-btn" data-close title="关闭 (ESC)">✕</button>
+      </div>
+    </div>
+
+    <span class="note-tag mono">${esc(n.tag)} · ${esc(n.kind)} · ${esc(n.readTime)}</span>
+    <h2 class="sheet-title">${esc(n.title)}</h2>
+    <p class="sheet-sub">${esc(n.desc)}</p>
+
+    <div class="sheet-sec">
+      <h5>BACKGROUND // 核心背景与动机</h5>
+      ${(n.body || []).map((t) => `<p>${esc(t)}</p>`).join('')}
+    </div>
+
+    <div class="sheet-sec">
+      <h5>KEY TAKEAWAYS // 关键要点拆解</h5>
+      <ul>${(n.highlights || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    </div>
+
+    ${
+      n.code
+        ? `<div class="sheet-sec">
+            <h5>CODE / WORKFLOW SNIPPET // 核心代码与拓扑</h5>
+            <pre class="sheet-code"><code>${esc(n.code)}</code></pre>
+          </div>`
+        : ''
+    }`;
+
+  $('#sheet').classList.add('is-open');
+  document.body.style.overflow = 'hidden';
+  location.hash = `note/${n.id}`;
+
+  $('#notePrevBtn').onclick = () => hasPrev && openNote(NOTES[idx - 1].id);
+  $('#noteNextBtn').onclick = () => hasNext && openNote(NOTES[idx + 1].id);
+  $('#noteCopyLinkBtn').onclick = () => copyText(window.location.href, `已复制文章链接: ${n.title}`);
+}
+
+/* ---------------- 03 ABOUT 渲染 ---------------- */
 function renderAbout() {
   $('#view-about').innerHTML = `
     <div class="wrap">
@@ -447,16 +642,26 @@ function renderAbout() {
           <!-- 命令行终端卡片 -->
           <div class="cli-widget">
             <div class="cli-head">
-              <span class="cli-dot red"></span>
-              <span class="cli-dot yellow"></span>
-              <span class="cli-dot green"></span>
-              <span class="cli-title">frog755@terminal — node_inspection</span>
+              <div class="cli-head-left">
+                <span class="cli-dot red"></span>
+                <span class="cli-dot yellow"></span>
+                <span class="cli-dot green"></span>
+                <span class="cli-title">frog755@terminal — node_inspection</span>
+              </div>
+              <span class="mono" style="font-size:10px;opacity:0.5">SSH: ACTIVE</span>
             </div>
-            <div><span class="cli-prompt">$</span> frog755 --system-status</div>
-            <div class="cli-out">
+            <div><span class="cli-prompt">$</span> <span id="cliInputText">frog755 --system-status</span></div>
+            <div class="cli-out" id="cliOutBox">
               ${(ABOUT.cli || [])
                 .map((item) => `[<span class="cli-highlight">${esc(item.k)}</span>] -> ${esc(item.v)}`)
                 .join('<br>')}
+            </div>
+            <div class="cli-shortcuts mono">
+              <span style="opacity:0.5;align-self:center">QUICK EXEC:</span>
+              <button class="cli-cmd-chip" data-cmd="skills">$ --skills</button>
+              <button class="cli-cmd-chip" data-cmd="projects">$ --projects</button>
+              <button class="cli-cmd-chip" data-cmd="contact">$ --contact</button>
+              <button class="cli-cmd-chip" data-cmd="clear">$ clear</button>
             </div>
           </div>
         </div>
@@ -517,9 +722,39 @@ function renderAbout() {
     </div>`;
 
   attachSpotlight();
+  attachCliInteractions();
 }
 
-/* ---------------- 详情抽屉面板 ---------------- */
+function attachCliInteractions() {
+  $$('.cli-cmd-chip').forEach((btn) => {
+    btn.onclick = () => {
+      const cmd = btn.dataset.cmd;
+      const inputEl = $('#cliInputText');
+      const outBox = $('#cliOutBox');
+      if (!inputEl || !outBox) return;
+      playSound(780, 'sine', 0.025);
+
+      if (cmd === 'clear') {
+        inputEl.textContent = 'clear';
+        outBox.innerHTML = '[TERMINAL CLEARED] — READY ■';
+        return;
+      }
+
+      if (cmd === 'skills') {
+        inputEl.textContent = 'frog755 --skills';
+        outBox.innerHTML = `[<span class="cli-highlight">STACK</span>] -> C/C++, TypeScript, Python, PowerShell, Rust<br>[<span class="cli-highlight">EMBEDDED</span>] -> STM32, Infineon AURIX TC264, PID Controller, CAN/UART<br>[<span class="cli-highlight">AGENT_STACK</span>] -> DeepSeek Harness, Playwright, MCP, Agent Skills, Claude Code`;
+      } else if (cmd === 'projects') {
+        inputEl.textContent = 'frog755 --projects --summary';
+        outBox.innerHTML = `[<span class="cli-highlight">TOTAL</span>] -> 16 Repositories Loaded<br>[<span class="cli-accent">HIGHLIGHT_01</span>] -> Agent Hub (Multi-Agent FSM)<br>[<span class="cli-accent">HIGHLIGHT_02</span>] -> browser-record (CLI Recording -> Agent Skills)<br>[<span class="cli-accent">HIGHLIGHT_03</span>] -> crazy_circuit (Dual-Core TriCore Car Embedded C)`;
+      } else if (cmd === 'contact') {
+        inputEl.textContent = 'frog755 --contact';
+        outBox.innerHTML = `[<span class="cli-highlight">EMAIL_QQ</span>] -> frog75@qq.com<br>[<span class="cli-highlight">EMAIL_GMAIL</span>] -> frog1960954886@gmail.com<br>[<span class="cli-highlight">GITHUB</span>] -> https://github.com/Frog755`;
+      }
+    };
+  });
+}
+
+/* ---------------- 项目详情抽屉 ---------------- */
 function openProject(id) {
   const idx = PROJECTS.findIndex((x) => x.id === id);
   if (idx === -1) return;
@@ -592,7 +827,8 @@ function closeSheet() {
   $('#sheet').classList.remove('is-open');
   document.body.style.overflow = '';
   currentProjectIndex = -1;
-  if (location.hash.startsWith('#project/')) {
+  currentNoteIndex = -1;
+  if (location.hash.startsWith('#project/') || location.hash.startsWith('#note/')) {
     location.hash = currentView;
   }
 }
@@ -603,11 +839,14 @@ function go(id, updateHash = true) {
   currentView = v.id;
   $$('.view').forEach((el) => el.classList.toggle('is-active', el.id === 'view-' + v.id));
   $$('.tab').forEach((el) => el.classList.toggle('is-active', el.dataset.view === v.id));
-  if (updateHash && location.hash.slice(1) !== v.id && !location.hash.startsWith('#project/')) {
+  if (updateHash && location.hash.slice(1) !== v.id && !location.hash.startsWith('#project/') && !location.hash.startsWith('#note/')) {
     location.hash = v.id;
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  if (v.id === 'index') requestAnimationFrame(resizeScope);
+  if (v.id === 'index') {
+    requestAnimationFrame(resizeScope);
+    startTypewriter();
+  }
   playSound(650, 'sine', 0.025);
 }
 
@@ -616,6 +855,7 @@ function setTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('blog-theme', t); } catch (e) {}
   playSound(850, 'sine', 0.03);
+  if (window.updateParticleTheme) window.updateParticleTheme();
 }
 
 /* ---------------- Spotlight 光标流光效果 ---------------- */
@@ -635,6 +875,7 @@ function attachSpotlight() {
 /* ---------------- 数字存储示波器 (DIGITAL STORAGE OSCILLOSCOPE) ---------------- */
 let scopeCtx = null, scopePhase = 0, scopeRaf = null;
 let scopeMode = 'sine';
+let isScopeFrozen = false;
 
 function resizeScope() {
   const c = $('#oscilloscope');
@@ -654,7 +895,15 @@ function initScope() {
   const block = canvas.parentElement;
   block.addEventListener('mousemove', (e) => {
     const r = block.getBoundingClientRect();
-    scopePhase += (e.clientX - r.left) / r.width * 0.08;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    scopePhase += ratio * 0.08;
+    const freq = 220 + ratio * 660;
+    updateScopeAudioFreq(freq);
+
+    const measureEl = $('#scopeMeasureTag');
+    if (measureEl) {
+      measureEl.textContent = `FREQ: ${(freq / 1000).toFixed(2)} kHz · Vpp: ${(3.0 + ratio * 0.8).toFixed(2)}V`;
+    }
   });
 
   $$('.scope-mode-btn').forEach((btn) => {
@@ -662,9 +911,31 @@ function initScope() {
       $$('.scope-mode-btn').forEach((b) => b.classList.remove('is-active'));
       btn.classList.add('is-active');
       scopeMode = btn.dataset.smode;
-      playSound(700, 'square', 0.03);
+      const ch1Tag = $('#scopeCh1Tag');
+      if (ch1Tag) ch1Tag.textContent = `CH1: 500mV/DIV · ${scopeMode.toUpperCase()}`;
+      playSound(720, 'square', 0.03);
     };
   });
+
+  const freezeBtn = $('#scopeFreezeBtn');
+  if (freezeBtn) {
+    freezeBtn.onclick = () => {
+      isScopeFrozen = !isScopeFrozen;
+      freezeBtn.classList.toggle('is-active', isScopeFrozen);
+      freezeBtn.textContent = isScopeFrozen ? 'RUN ▶' : 'FREEZE ⏸';
+      const statTag = $('#scopeStatusTag');
+      if (statTag) {
+        statTag.textContent = isScopeFrozen ? 'TRIG: HOLD [FROZEN]' : 'TRIG: AUTO [SCANNING]';
+        statTag.style.color = isScopeFrozen ? '#ff5f56' : '';
+      }
+      playSound(600, 'sine', 0.03);
+    };
+  }
+
+  const audioBtn = $('#scopeAudioBtn');
+  if (audioBtn) {
+    audioBtn.onclick = () => toggleScopeAudio();
+  }
 
   drawScope();
 }
@@ -687,7 +958,7 @@ function drawScope() {
   for (let y = 0; y < h; y += gridY) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
   }
-  // 中心十字轴线 (Center Crosshair)
+  // 中心十字轴线
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
   ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
@@ -705,7 +976,7 @@ function drawScope() {
   ctx.stroke();
 
   // 3. CH1 主波形 (Frog Neon Green)
-  const color = accent();
+  const color = '#00ff66';
   ctx.beginPath();
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.8;
@@ -736,7 +1007,9 @@ function drawScope() {
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  scopePhase += 0.022;
+  if (!isScopeFrozen) {
+    scopePhase += 0.022;
+  }
   scopeRaf = requestAnimationFrame(drawScope);
 }
 
@@ -788,10 +1061,16 @@ function initParticles() {
         gl_FragColor = vec4(uColor, alpha * glow * waveGlow);
       }`;
 
+    const getParticleColor = () => (isDark() ? new THREE.Color('#00ff66') : new THREE.Color('#0a4d29'));
+
     const uniforms = {
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector3(0, 0, 0) },
-      uColor: { value: new THREE.Color(accent()) }
+      uColor: { value: getParticleColor() }
+    };
+
+    window.updateParticleTheme = () => {
+      uniforms.uColor.value.copy(getParticleColor());
     };
 
     const material = new THREE.ShaderMaterial({
@@ -824,7 +1103,6 @@ function initParticles() {
       requestAnimationFrame(loop);
       if (document.body.classList.contains('no-particles')) return;
       uniforms.uTime.value = clock.getElapsedTime();
-      uniforms.uColor.value.set(accent());
       raycaster.setFromCamera(mouse, camera);
       raycaster.ray.intersectPlane(plane, target);
       current.lerp(target, 0.06);
@@ -861,12 +1139,12 @@ function initCanvasFallbackParticles() {
     requestAnimationFrame(loop);
     if (document.body.classList.contains('no-particles')) return;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = accent();
+    ctx.fillStyle = isDark() ? '#00ff66' : '#0a4d29';
     particles.forEach((p) => {
       p.x += p.vx; p.y += p.vy;
       if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
       if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
-      ctx.globalAlpha = 0.25;
+      ctx.globalAlpha = 0.35;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
@@ -904,7 +1182,10 @@ function buildCmdItems() {
       type: 'NOTE',
       title: `${n.num} ${n.title}`,
       meta: `${n.tag} · ${n.date}`,
-      action: () => go('notes')
+      action: () => {
+        go('notes', false);
+        openNote(n.id);
+      }
     });
   });
   // 4. 快捷指令
@@ -931,7 +1212,7 @@ function buildCmdItems() {
       soundEnabled = !soundEnabled;
       localStorage.setItem('frog-sound', soundEnabled ? '1' : '0');
       $('#soundToggle').classList.toggle('is-on', soundEnabled);
-      showToast(soundEnabled ? '音效已开启' : '音效已关闭');
+      showToast(soundEnabled ? '按键音效已开启' : '按键音效已关闭');
     }
   });
   return items;
@@ -991,7 +1272,7 @@ function execSelectedCmd() {
   }
 }
 
-/* ---------------- 初始化与事件绑定 ---------------- */
+/* ---------------- 初始化与事件委托 ---------------- */
 function init() {
   $('#brand-name').innerHTML = `${esc(SITE.name)}<em>.</em>`;
   $('#brand-sub').textContent = SITE.latin;
@@ -1025,6 +1306,10 @@ function init() {
 
     const row = e.target.closest('[data-project]');
     if (row) return openProject(row.dataset.project);
+
+    // 笔记点击打开阅读抽屉
+    const noteEl = e.target.closest('[data-note-id]');
+    if (noteEl) return openNote(noteEl.dataset.noteId);
 
     if (e.target.closest('[data-close]') || e.target.id === 'sheet-bg') return closeSheet();
 
@@ -1147,12 +1432,20 @@ function init() {
       return;
     }
 
-    // 抽屉展开时 Left / Right 导航项目
+    // 抽屉展开时 Left / Right 导航项目或笔记
     if ($('#sheet').classList.contains('is-open')) {
-      if (e.key === 'ArrowLeft' && currentProjectIndex > 0) {
-        openProject(PROJECTS[currentProjectIndex - 1].id);
-      } else if (e.key === 'ArrowRight' && currentProjectIndex < PROJECTS.length - 1) {
-        openProject(PROJECTS[currentProjectIndex + 1].id);
+      if (currentProjectIndex !== -1) {
+        if (e.key === 'ArrowLeft' && currentProjectIndex > 0) {
+          openProject(PROJECTS[currentProjectIndex - 1].id);
+        } else if (e.key === 'ArrowRight' && currentProjectIndex < PROJECTS.length - 1) {
+          openProject(PROJECTS[currentProjectIndex + 1].id);
+        }
+      } else if (currentNoteIndex !== -1) {
+        if (e.key === 'ArrowLeft' && currentNoteIndex > 0) {
+          openNote(NOTES[currentNoteIndex - 1].id);
+        } else if (e.key === 'ArrowRight' && currentNoteIndex < NOTES.length - 1) {
+          openNote(NOTES[currentNoteIndex + 1].id);
+        }
       }
       return;
     }
@@ -1184,6 +1477,10 @@ function init() {
     const pid = hash.replace('project/', '');
     go('projects', false);
     setTimeout(() => openProject(pid), 100);
+  } else if (hash.startsWith('note/')) {
+    const nid = hash.replace('note/', '');
+    go('notes', false);
+    setTimeout(() => openNote(nid), 100);
   } else {
     go(hash || 'index', false);
   }

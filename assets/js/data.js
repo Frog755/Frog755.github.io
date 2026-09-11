@@ -24,6 +24,14 @@ const SITE = {
     '去掉所有无意义的冗余，用最干净的逻辑解决复杂的问题。'
 };
 
+/* 轮播动词标语 */
+const HERO_PUNCHLINES = [
+  'WORKS ITSELF.',
+  'RUNS 24/7.',
+  'CLOSES THE LOOP.',
+  'FEELS INVISIBLE.'
+];
+
 /* 分类 */
 const CATEGORIES = [
   { id: 'all', label: '全部', en: 'ALL' },
@@ -59,7 +67,7 @@ const PROJECTS = [
     ],
     stack: ['Node.js', 'JSON Schema', 'PowerShell', 'File-backed FSM'],
     links: [
-      { label: '查看架构文档', url: '#notes' }
+      { label: '查看架构文档', url: '#note/03' }
     ]
   },
   {
@@ -132,7 +140,9 @@ const PROJECTS = [
       '以自身任务分布为准，拒绝照搬通用 benchmark 结论'
     ],
     stack: ['CSV', '统计分析', '自动化评测'],
-    links: []
+    links: [
+      { label: '查看评测方法论', url: '#note/05' }
+    ]
   },
   {
     num: '05',
@@ -226,7 +236,9 @@ const PROJECTS = [
       '集成 qu-ai-wei 去 AI 味工具做文案改写'
     ],
     stack: ['TypeScript', 'Node.js', 'Plugin Dev'],
-    links: []
+    links: [
+      { label: '查看原理解析', url: '#note/01' }
+    ]
   },
   {
     num: '09',
@@ -268,7 +280,9 @@ const PROJECTS = [
       '已产出作品：Agnes 全模态模型介绍片、TrendRadar 部署教学、Auto-Retry 原理讲解'
     ],
     stack: ['HyperFrames', 'GSAP', 'MiMo TTS', 'FFmpeg', 'Playwright'],
-    links: []
+    links: [
+      { label: '查看教学案例', url: '#note/02' }
+    ]
   },
   {
     num: '11',
@@ -406,52 +420,148 @@ const PROJECTS = [
   }
 ];
 
-/* 笔记 / 文章 */
+/* 笔记 / 深度文章 */
 const NOTES = [
   {
+    id: '01',
     num: '01',
     date: '2026-08',
     title: 'DeepSeek Harness 429 自动重试插件原理',
     kind: '技术文章',
     desc: '已发布于掘金的终稿。把插件逻辑讲成一个拟人故事：转圈圈、贴标签、小耳朵、懂分寸重试 5 次停手。',
     tag: 'DSH',
-    readTime: '5 MIN READ'
+    readTime: '5 MIN READ',
+    body: [
+      '在本地运行 Agent 时，最让人头疼的就是大模型 API 偶发的 429 (Too Many Requests) 或服务器负载波动。一旦中断，整个长任务链条直接挂死，需要人工守在屏幕前点继续。',
+      '为了彻底解决这个问题，我给 DeepSeek Harness 编写了一个常驻客户端插件。整个实现思想很纯粹，像一个小耳朵：默默监听 harness 的消息流转状态。'
+    ],
+    highlights: [
+      '拟人三阶段：AI 干活（转圈圈） → 遇到异常（贴标签 429） → 小耳朵识别并自动倒数重发',
+      '三种可续场景严格判定：限流重试、中断续跑、空回复检测',
+      '懂分寸机制：硬性设置上限 5 次重试保护，带指数退避（Exponential Backoff），严防死循环烧爆 Token',
+      '去 AI 味工作流验证：本文全文经自研 qu-ai-wei 管道处理，掘金读者反馈极高'
+    ],
+    code: `// 核心监听与指数退避重试伪代码
+ctx.on('session/step-finish', async (step) => {
+  if (step.error && isRateLimitError(step.error)) {
+    if (retryCount >= MAX_RETRIES) {
+      log.warn('[AutoRetry] 上限5次达到，保持现场，等待人工干预');
+      return;
+    }
+    const delay = Math.pow(2, retryCount) * 1000 + Math.random() * 500;
+    retryCount++;
+    await sleep(delay);
+    await ctx.session.continue();
+  }
+});`
   },
   {
+    id: '02',
     num: '02',
     date: '2026-08',
     title: 'TrendRadar × GitHub Actions 部署教学',
     kind: '视频 + 文档',
     desc: '面向零编程基础用户，真实界面截图逐步演示 Use this template → Secrets → Run workflow，配 MiMo 女声口播。',
     tag: '教程',
-    readTime: '6 MIN READ'
+    readTime: '6 MIN READ',
+    body: [
+      '许多优秀开源项目（如 TrendRadar 热榜监控）对没有编程经验的普通用户有极高门槛。很多人倒在 Python 环境配置、网络代理或服务器租用上。',
+      '我制作了一套完全面向零基础小白的 30 秒无服务器免费部署教程，将复杂的技术操作降维为三步流水线，并配合自研 HyperFrames 动画视频出海发布。'
+    ],
+    highlights: [
+      '无服务器（Serverless）：完全跑在 GitHub 官方免费 Actions 节点上，电脑不开机也能 24 小时定时巡检',
+      '零代码配置：仅需点击 Use this template，在 Repository Secrets 中粘贴机器人 Webhook Key',
+      '多平台推送：打通企业微信机器人、Server酱与 Telegram 频道',
+      '全自动化视频验证：配套 16 段 MiMo TTS 逐句口播与音画对齐视频'
+    ],
+    code: `# GitHub Actions 定时触发配置 (.github/workflows/trend.yml)
+on:
+  schedule:
+    - cron: '*/30 * * * *' # 每30分钟巡检一次
+  workflow_dispatch:        # 支持手动立即触发`
   },
   {
+    id: '03',
     num: '03',
     date: '2026-09',
     title: 'Agent Hub 设计文档',
     kind: '设计文档',
     desc: '约 38KB 的完整设计说明：协议、任务状态机、事务日志、runner 与评审环路的全部细节。',
     tag: '架构',
-    readTime: '12 MIN READ'
+    readTime: '12 MIN READ',
+    body: [
+      '当前市面上的多智能体框架普遍存在过度抽象、过度依赖内存通信、出 bug 后无法追溯的问题。一旦进程崩溃或网络波动，执行进度全丢。',
+      'Agent Hub 另辟蹊径：坚持「纯本地、以文件为唯一事实来源（File-backed Single Source of Truth）」的原则。状态流转就是磁盘文件夹之间移动原子 JSON 文件。'
+    ],
+    highlights: [
+      '极简状态拓扑：inbox/ -> planned/ -> active/ -> review/ -> done/ (或 paused/ / blocked/)',
+      '两段式事务保证：prepared journal（预备）与 committed journal（已提交），保证机器意外掉电后幂等恢复',
+      '有界审查循环：Worker Agent 实现后必须交由独立 Reviewer Agent 跑测试；修复轮次设死上限（≤3轮），杜绝胡思乱想',
+      '全通道移动投递：移动端（微信/Telegram）发出控制信号，本地 Hermes 仅做文件夹重命名，零复杂 RPC 依赖'
+    ],
+    code: `[Agent Hub 状态流转图]
+  User (Mobile) -> [inbox/] 
+                      │ (claim)
+                      ▼
+                 [planned/] ──(pi worker)──> [active/]
+                                                │ (settle)
+                                                ▼
+     [done/] <──(pass)─── [review/] <───────────┘
+                           │ (revise <= 3)
+                           └───> [active/repair]`
   },
   {
+    id: '04',
     num: '04',
     date: '2026-08',
     title: '去 AI 味：技术文章改写工作流',
     kind: '方法论',
     desc: '集成 qu-ai-wei 工具链，把 Agent 生成的初稿改写成读起来像人写的中文技术文章。',
     tag: '写作',
-    readTime: '4 MIN READ'
+    readTime: '4 MIN READ',
+    body: [
+      '大模型生成的文本有一种极其强烈的「AI 味」——大量使用「值得注意的是」、「总而言之」、「显而易见」、「犹如一座灯塔」、「在当今数字化浪潮中」等空洞套话，阅读体感极其生硬。',
+      '为了让技术文章回归真实、硬核与说人话，我提炼了一套严谨的「去 AI 味」改写规则与脚本流水线。'
+    ],
+    highlights: [
+      '无情剔除假大空：禁止宏大叙事开头，开篇第一句必须直奔具体痛点与真实报错',
+      '还原第一人称动作：把「我们可以观察到此模块具备...」改为「我写了个小脚本去抓...」',
+      '禁用八股文过渡词：全局扫描并替换「深入探讨、赋能、底座、矩阵、值得强调的是」',
+      '留存真实的踩坑痕迹：文章必须写出“在哪一步卡了半天”、“哪个坑千万别踩”，这才是人类工程师文章的灵魂'
+    ],
+    code: `// 敏感八股词拦截规则 (qu-ai-wei pipeline)
+const BANNED_PATTERNS = [
+  /值得(注意|一提)的是/,
+  /总而言之|综上所述/,
+  /在当今.*浪潮下/,
+  /不失为一个.*选择/,
+  /犹如|仿佛/
+];`
   },
   {
+    id: '05',
     num: '05',
     date: '2026-08',
     title: '本地评测集：用真实任务度量 Agent 可靠性',
     kind: '方法论',
     desc: '拒绝照搬外部 benchmark 数字，改为记录自己每天真实任务的成败与重试，用数据决定优化优先级。',
     tag: '评测',
-    readTime: '5 MIN READ'
+    readTime: '5 MIN READ',
+    body: [
+      '厂商宣传的通用 Benchmark（如 SWE-bench 涨了 3%、HumanEval 92%）往往跟日常真实生产脱节。你在本地修一个环境报错，模型依然可能反复犯蠢。',
+      '唯有建立属于自己的“本地真实任务评测集（Local Dogfooding Eval Set）”，才能用数据说话，知道哪里的 Prompt 必须改、哪里的工具链必须加防御。'
+    ],
+    highlights: [
+      '结果导向：每跑完一次真实任务（浏览器自动化、固件编译、接口调试），自动向本地 CSV 追加一行遥测',
+      '关键度量维度：Task ID、完成耗时、首次命中率、重试次数、人手干涉标记、消耗 Token 量',
+      '防御性优化指导：数据清晰指出：Agent 翻车 70% 出在 DOM 选择器失效与命令拼写，以此精准催生出 browser-record 项目',
+      '工程长期主义：不迷信大模型玄学，把 Agent 当作带有概率分布的确定性机器去工程化收敛'
+    ],
+    code: `# results.csv 格式标准
+date,task_id,status,retry_cnt,human_assist,latency_sec,token_cost
+2026-08-20,douyin_v6_reply,SUCCESS,1,FALSE,14.2,3820
+2026-08-21,aurix_pid_tuning,SUCCESS,0,FALSE,38.5,12400
+2026-08-22,trendradar_deploy,SUCCESS,0,FALSE,18.0,4100`
   }
 ];
 
